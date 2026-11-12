@@ -245,10 +245,16 @@ impl App {
     }
 
     fn hit(&self, x: f32, y: f32) -> bool {
+        if self.layout == Layout::Cards {
+            return state::quick_card().contains(x, y) || state::shelf_card().contains(x, y);
+        }
         self.state.hit_shape(&self.metrics).contains(x, y)
     }
 
     fn hit_with_margin(&self, x: f32, y: f32) -> bool {
+        if self.layout == Layout::Cards {
+            return self.hit(x, y);
+        }
         let mut s = self.state.hit_shape(&self.metrics);
         s.x -= HOVER_MARGIN;
         s.y -= HOVER_MARGIN;
@@ -306,13 +312,24 @@ impl App {
             self.settings.save();
         }
         self.metrics = Metrics::for_layout(&self.settings, layout);
+        if layout == Layout::Cards {
+            // Cards are a persistent surface, not a hover expansion.
+            self.state.phase = Phase::Expanded;
+            self.state.t = 1.0;
+            self.spring = Spring::new(1.0);
+            self.animating = false;
+            disarm_anim_timer();
+        }
         let width = (self.metrics.surface_w * self.scale).round() as i32;
         let height = (self.metrics.surface_h * self.scale).round() as i32;
         let _ = self.renderer.resize(width as u32, height as u32);
-        let _ = window::place(self.hwnd, width, height);
+        if layout == Layout::Cards {
+            let margin = (16.0 * self.scale).round() as i32;
+            let _ = window::place_right(self.hwnd, width, height, margin);
+        } else {
+            let _ = window::place(self.hwnd, width, height);
+        }
         if from_wide {
-            // The panel is narrower than the bar, so the pointer can land
-            // outside it right after the click. Give it a moment to move in.
             self.wide_grace = Some(Instant::now());
         }
         self.draw();
@@ -645,8 +662,17 @@ unsafe extern "system" fn notch_wndproc(
             SetWindowLongPtrW(hwnd, GWLP_USERDATA, ptr as isize);
             NOTCH_HWND.store(hwnd.0 as isize, Ordering::Relaxed);
 
+            if layout == Layout::Cards {
+                (*ptr).state.phase = Phase::Expanded;
+                (*ptr).state.t = 1.0;
+                (*ptr).spring = Spring::new(1.0);
+            }
             (*ptr).draw();
-            let placed = window::place(hwnd, width as i32, height as i32);
+            let placed = if layout == Layout::Cards {
+                window::place_right(hwnd, width as i32, height as i32, (16.0 * scale) as i32)
+            } else {
+                window::place(hwnd, width as i32, height as i32)
+            };
             log(&format!(
                 "created {}x{} scale={} place={:?} state={} hide={}",
                 width,
@@ -676,6 +702,16 @@ unsafe extern "system" fn notch_wndproc(
             if let Some(app) = app(hwnd) {
                 let x = x_lparam(lparam) / app.scale;
                 let y = y_lparam(lparam) / app.scale;
+
+                if app.layout == Layout::Cards {
+                    let hits = state::card_hits();
+                    if app.dragging_volume {
+                        app.apply_volume(x, &hits.volume);
+                    } else if app.dragging_brightness {
+                        app.apply_brightness(x, &hits.brightness);
+                    }
+                    return LRESULT(0);
+                }
 
                 if app.dragging_volume {
                     let shape = app.state.shape(&app.metrics);
@@ -801,6 +837,19 @@ unsafe extern "system" fn notch_wndproc(
         WM_LBUTTONDOWN => {            if let Some(app) = app(hwnd) {
                 let x = x_lparam(lparam) / app.scale;
                 let y = y_lparam(lparam) / app.scale;
+                if app.layout == Layout::Cards {
+                    let hits = state::card_hits();
+                    if hits.volume.contains(x, y) {
+                        app.dragging_volume = true;
+                        let _ = SetCapture(hwnd);
+                        app.apply_volume(x, &hits.volume);
+                    } else if hits.brightness.contains(x, y) {
+                        app.dragging_brightness = true;
+                        let _ = SetCapture(hwnd);
+                        app.apply_brightness(x, &hits.brightness);
+                    }
+                    return LRESULT(0);
+                }
                 if app.state.phase == Phase::Expanded && app.layout == Layout::Panel && app.page == 1 {
                     let shape = app.state.shape(&app.metrics);
                     let controls = state::controls(&shape);
@@ -830,6 +879,55 @@ unsafe extern "system" fn notch_wndproc(
             if let Some(app) = app(hwnd) {
                 let x = x_lparam(lparam) / app.scale;
                 let y = y_lparam(lparam) / app.scale;
+                if app.layout == Layout::Cards {
+                    let hits = state::card_hits();
+                    if app.dragging_volume {
+                        app.apply_volume(x, &hits.volume);
+                        app.dragging_volume = false;
+                        let _ = ReleaseCapture();
+                        return LRESULT(0);
+                    }
+                    if app.dragging_brightness {
+                        app.apply_brightness(x, &hits.brightness);
+                        app.dragging_brightness = false;
+                        let _ = ReleaseCapture();
+                        return LRESULT(0);
+                    }
+                    if hits.focus.contains(x, y) {
+                        app.focus_running = !app.focus_running;
+                        if app.focus_running {
+                            app.focus_remaining = app.focus_remaining.max(1.0);
+                        }
+                        app.draw();
+                        return LRESULT(0);
+                    }
+                    if hits.battery.contains(x, y) {
+                        open_uri(w!("ms-settings:batterysaver"));
+                        return LRESULT(0);
+                    }
+                    if hits.record.contains(x, y) {
+                        open_uri(w!("ms-gamebar"));
+                        return LRESULT(0);
+                    }
+                    if hits.theme.contains(x, y) {
+                        open_uri(w!("ms-settings:colors"));
+                        return LRESULT(0);
+                    }
+                    if hits.clear.contains(x, y) {
+                        app.shelf.clear();
+                        app.draw();
+                        return LRESULT(0);
+                    }
+                    for (index, row) in hits.rows.iter().enumerate() {
+                        if row.contains(x, y) {
+                            if let Some(path) = app.shelf.paths.get(index) {
+                                open_path(path);
+                            }
+                            return LRESULT(0);
+                        }
+                    }
+                    return LRESULT(0);
+                }
                 if app.dragging_volume {
                     let shape = app.state.shape(&app.metrics);
                     let controls = state::controls(&shape);
@@ -1137,6 +1235,9 @@ unsafe extern "system" fn notch_wndproc(
         audio::WM_APP_VOLUME => {
             if let Some(app) = app(hwnd) {
                 app.update_volume_overlay();
+                if app.layout == Layout::Cards {
+                    app.draw();
+                }
             }
             LRESULT(0)
         }
@@ -1165,7 +1266,12 @@ unsafe extern "system" fn notch_wndproc(
                 let width = (app.metrics.surface_w * app.scale).round() as i32;
                 let height = (app.metrics.surface_h * app.scale).round() as i32;
                 let _ = app.renderer.resize(width as u32, height as u32);
-                let _ = window::place(hwnd, width, height);
+                if app.layout == Layout::Cards {
+                    let margin = (16.0 * app.scale).round() as i32;
+                    let _ = window::place_right(hwnd, width, height, margin);
+                } else {
+                    let _ = window::place(hwnd, width, height);
+                }
                 app.draw();
             }
             LRESULT(0)
@@ -1278,6 +1384,11 @@ unsafe extern "system" fn menu_wndproc(
                         app.apply_layout(Layout::Wide, true);
                     }
                 }
+                tray::CMD_LAYOUT_CARDS => {
+                    if let Some(app) = app(HWND(NOTCH_HWND.load(Ordering::Relaxed) as *mut core::ffi::c_void)) {
+                        app.apply_layout(Layout::Cards, true);
+                    }
+                }
                 tray::CMD_QUIT => {
                     PostQuitMessage(0);
                 }
@@ -1337,6 +1448,12 @@ fn battery_state() -> (Option<u32>, bool) {
         )
     } else {
         (None, false)
+    }
+}
+
+fn open_uri(uri: PCWSTR) {
+    unsafe {
+        ShellExecuteW(None, w!("open"), uri, None, None, SW_SHOWNORMAL);
     }
 }
 

@@ -47,6 +47,36 @@ pub fn place(hwnd: HWND, width_px: i32, height_px: i32) -> Result<()> {
     Ok(())
 }
 
+/// Places a surface at the bottom-right of the monitor work area.
+pub fn place_right(
+    hwnd: HWND,
+    width_px: i32,
+    height_px: i32,
+    margin_px: i32,
+) -> Result<()> {
+    unsafe {
+        let monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+        let mut info = MONITORINFO {
+            cbSize: std::mem::size_of::<MONITORINFO>() as u32,
+            ..Default::default()
+        };
+        GetMonitorInfoW(monitor, &mut info).ok()?;
+        let work = info.rcWork;
+        let x = work.right - width_px - margin_px;
+        let y = work.bottom - height_px - margin_px;
+        SetWindowPos(
+            hwnd,
+            Some(HWND_TOPMOST),
+            x,
+            y,
+            width_px,
+            height_px,
+            SWP_NOACTIVATE | SWP_SHOWWINDOW,
+        )?;
+    }
+    Ok(())
+}
+
 /// True when a fullscreen app, presentation or D3D fullscreen owns the screen.
 ///
 /// `QUNS_BUSY` alone is too broad (it also fires for the lock screen and

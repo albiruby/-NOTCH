@@ -28,6 +28,8 @@ pub enum Layout {
     Panel,
     /// One wide bar with media, metrics, and clock.
     Wide,
+    /// Two floating cards: quick controls and file shelf.
+    Cards,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -63,6 +65,8 @@ impl Metrics {
             if layout == Layout::Wide {
                 // One wide bar: media, transport, metrics, and clock in a row.
                 (996.0, 188.0, 900.0, 140.0, 28.0)
+            } else if layout == Layout::Cards {
+                (424.0, 568.0, 424.0, 568.0, 0.0)
             } else {
                 // The expanded panel has a fixed content layout, so it never
                 // shrinks below the height that layout needs.
@@ -190,6 +194,89 @@ pub fn next_id() -> u64 {
     NEXT.fetch_add(1, Ordering::Relaxed)
 }
 
+pub fn quick_card() -> Rect {
+    Rect {
+        x: 12.0,
+        y: 12.0,
+        w: 400.0,
+        h: 330.0,
+    }
+}
+
+pub fn shelf_card() -> Rect {
+    Rect {
+        x: 12.0,
+        y: 358.0,
+        w: 400.0,
+        h: 198.0,
+    }
+}
+
+pub struct CardHits {
+    pub volume: Rect,
+    pub brightness: Rect,
+    pub focus: Rect,
+    pub battery: Rect,
+    pub record: Rect,
+    pub theme: Rect,
+    pub clear: Rect,
+    pub rows: [Rect; 5],
+}
+
+pub fn card_hits() -> CardHits {
+    let row = |index: usize| Rect {
+        x: 32.0,
+        y: 398.0 + index as f32 * 28.0,
+        w: 360.0,
+        h: 26.0,
+    };
+    CardHits {
+        volume: Rect {
+            x: 32.0,
+            y: 82.0,
+            w: 360.0,
+            h: 38.0,
+        },
+        brightness: Rect {
+            x: 32.0,
+            y: 128.0,
+            w: 360.0,
+            h: 38.0,
+        },
+        focus: Rect {
+            x: 32.0,
+            y: 192.0,
+            w: 172.0,
+            h: 30.0,
+        },
+        battery: Rect {
+            x: 216.0,
+            y: 192.0,
+            w: 172.0,
+            h: 30.0,
+        },
+        record: Rect {
+            x: 32.0,
+            y: 230.0,
+            w: 172.0,
+            h: 30.0,
+        },
+        theme: Rect {
+            x: 216.0,
+            y: 230.0,
+            w: 172.0,
+            h: 30.0,
+        },
+        clear: Rect {
+            x: 340.0,
+            y: 366.0,
+            w: 50.0,
+            h: 16.0,
+        },
+        rows: [row(0), row(1), row(2), row(3), row(4)],
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum OverlayKind {
     Volume,
@@ -217,6 +304,10 @@ pub struct Rect {
 }
 
 impl Rect {
+    pub fn right(&self) -> f32 {
+        self.x + self.w
+    }
+
     pub fn contains(&self, px: f32, py: f32) -> bool {
         px >= self.x && px <= self.x + self.w && py >= self.y && py <= self.y + self.h
     }

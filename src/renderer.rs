@@ -337,6 +337,14 @@ impl Renderer {
             ctx.SetAntialiasMode(D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);
             ctx.Clear(None);
 
+            if p.layout == crate::state::Layout::Cards {
+                self.draw_cards(p)?;
+                ctx.EndDraw(None, None)?;
+                let hr = self.swapchain.Present(0, DXGI_PRESENT(0));
+                hr.ok()?;
+                return Ok(());
+            }
+
             let border = theme::rgb(theme::color::VIOLET_800, 0.30 * p.opacity);
             let primary = theme::rgb(theme::color::TEXT_PRIMARY, 1.0);
             let secondary = theme::rgb(theme::color::TEXT_SECONDARY, 1.0);
@@ -1769,6 +1777,273 @@ impl Renderer {
             ctx.EndDraw(None, None)?;
             let hr = self.swapchain.Present(0, DXGI_PRESENT(0));
             hr.ok()?;
+        }
+        Ok(())
+    }
+
+    fn draw_cards(&self, p: &DrawParams) -> Result<()> {
+        let s = p.scale;
+        let hits = crate::state::card_hits();
+        unsafe {
+            let ctx = &self.ctx;
+            let primary = solid(ctx, &theme::rgb(theme::color::TEXT_PRIMARY, 1.0))?;
+            let secondary = solid(ctx, &theme::rgb(theme::color::TEXT_SECONDARY, 1.0))?;
+            let accent = solid(ctx, &theme::rgb(theme::color::ACCENT_PRIMARY, 1.0))?;
+            let track = solid(ctx, &theme::rgb(theme::color::BG_ELEVATED, 1.0))?;
+            let border_color = theme::rgb(theme::color::VIOLET_800, 0.32 * p.opacity);
+
+            for card in [crate::state::quick_card(), crate::state::shelf_card()] {
+                let rect = scaled_rect(card.x, card.y, card.w, card.h, s);
+                let rr = D2D1_ROUNDED_RECT {
+                    rect,
+                    radiusX: 20.0 * s,
+                    radiusY: 20.0 * s,
+                };
+                let stops = [
+                    D2D1_GRADIENT_STOP {
+                        position: 0.0,
+                        color: theme::rgb(
+                            theme::color::VIOLET_950,
+                            theme::glass::STRONG_TOP * p.opacity,
+                        ),
+                    },
+                    D2D1_GRADIENT_STOP {
+                        position: 0.62,
+                        color: theme::rgb(
+                            theme::color::GRAPHITE_900,
+                            theme::glass::STRONG_MID * p.opacity,
+                        ),
+                    },
+                    D2D1_GRADIENT_STOP {
+                        position: 1.0,
+                        color: theme::rgb(
+                            theme::color::GRAPHITE_950,
+                            theme::glass::STRONG_BOTTOM * p.opacity,
+                        ),
+                    },
+                ];
+                let collection = ctx.CreateGradientStopCollection(
+                    &stops,
+                    D2D1_COLOR_SPACE_SRGB,
+                    D2D1_COLOR_SPACE_SRGB,
+                    D2D1_BUFFER_PRECISION_8BPC_UNORM,
+                    D2D1_EXTEND_MODE_CLAMP,
+                    D2D1_COLOR_INTERPOLATION_MODE_STRAIGHT,
+                )?;
+                let props = D2D1_LINEAR_GRADIENT_BRUSH_PROPERTIES {
+                    startPoint: Vector2 {
+                        X: rect.left,
+                        Y: rect.top,
+                    },
+                    endPoint: Vector2 {
+                        X: rect.left,
+                        Y: rect.bottom,
+                    },
+                };
+                let gradient: ID2D1LinearGradientBrush =
+                    ctx.CreateLinearGradientBrush(&props, None, &collection)?;
+                ctx.FillRoundedRectangle(&rr, &gradient);
+                let border = solid(ctx, &border_color)?;
+                ctx.DrawRoundedRectangle(&rr, &border, 1.0, None);
+                let highlight =
+                    solid(ctx, &theme::rgb(0xFFFFFF, theme::glass::HIGHLIGHT_OPACITY))?;
+                ctx.FillRectangle(
+                    &D2D_RECT_F {
+                        left: (card.x + 20.0) * s,
+                        top: (card.y + 1.0) * s,
+                        right: (card.right() - 20.0) * s,
+                        bottom: (card.y + 1.8) * s,
+                    },
+                    &highlight,
+                );
+            }
+
+            let pad = 32.0;
+            draw_text(
+                ctx,
+                "QUICK CONTROLS",
+                &self.fmt_status,
+                scaled_rect(pad, 28.0, 220.0, 14.0, s),
+                &secondary,
+            );
+
+            let (wifi, wifi_on) = match p.net.wifi {
+                Some(true) => ("WI-FI ON", true),
+                Some(false) => ("WI-FI OFF", false),
+                None => ("WI-FI N/A", false),
+            };
+            let (bt, bt_on) = match p.net.bluetooth {
+                Some(true) => ("BT ON", true),
+                Some(false) => ("BT OFF", false),
+                None => ("BT N/A", false),
+            };
+            let wifi_brush = if wifi_on {
+                solid(ctx, &theme::rgb(theme::color::SUCCESS, 1.0))?
+            } else {
+                solid(ctx, &theme::rgb(theme::color::TEXT_MUTED, 1.0))?
+            };
+            draw_text(ctx, wifi, &self.fmt_status, scaled_rect(pad, 48.0, 120.0, 14.0, s), &wifi_brush);
+            let bt_brush = if bt_on {
+                solid(ctx, &theme::rgb(theme::color::SUCCESS, 1.0))?
+            } else {
+                solid(ctx, &theme::rgb(theme::color::TEXT_MUTED, 1.0))?
+            };
+            draw_text(ctx, bt, &self.fmt_status, scaled_rect(pad + 130.0, 48.0, 120.0, 14.0, s), &bt_brush);
+
+            draw_text(ctx, "VOLUME", &self.fmt_label, scaled_rect(pad, 80.0, 160.0, 14.0, s), &secondary);
+            let volume_text = if p.muted {
+                "MUTED".to_string()
+            } else {
+                format!("{:.0}%", p.volume * 100.0)
+            };
+            draw_text(ctx, &volume_text, &self.fmt_value, scaled_rect(232.0, 80.0, 160.0, 14.0, s), &primary);
+            ctx.FillRoundedRectangle(
+                &D2D1_ROUNDED_RECT {
+                    rect: scaled_rect_raw(pad, 102.0, 360.0, 3.0, s),
+                    radiusX: 1.5 * s,
+                    radiusY: 1.5 * s,
+                },
+                &track,
+            );
+            if p.volume > 0.001 && !p.muted {
+                ctx.FillRoundedRectangle(
+                    &D2D1_ROUNDED_RECT {
+                        rect: scaled_rect_raw(pad, 102.0, 360.0 * p.volume.clamp(0.0, 1.0), 3.0, s),
+                        radiusX: 1.5 * s,
+                        radiusY: 1.5 * s,
+                    },
+                    &accent,
+                );
+            }
+
+            draw_text(ctx, "BRIGHTNESS", &self.fmt_label, scaled_rect(pad, 126.0, 180.0, 14.0, s), &secondary);
+            let bright = if p.has_brightness {
+                format!("{:.0}%", p.brightness * 100.0)
+            } else {
+                "N/A".to_string()
+            };
+            draw_text(ctx, &bright, &self.fmt_value, scaled_rect(232.0, 126.0, 160.0, 14.0, s), &primary);
+            ctx.FillRoundedRectangle(
+                &D2D1_ROUNDED_RECT {
+                    rect: scaled_rect_raw(pad, 148.0, 360.0, 3.0, s),
+                    radiusX: 1.5 * s,
+                    radiusY: 1.5 * s,
+                },
+                &track,
+            );
+            if p.has_brightness && p.brightness > 0.001 {
+                ctx.FillRoundedRectangle(
+                    &D2D1_ROUNDED_RECT {
+                        rect: scaled_rect_raw(
+                            pad,
+                            148.0,
+                            360.0 * p.brightness.clamp(0.0, 1.0),
+                            3.0,
+                            s,
+                        ),
+                        radiusX: 1.5 * s,
+                        radiusY: 1.5 * s,
+                    },
+                    &accent,
+                );
+            }
+
+            let divider = solid(ctx, &border_color)?;
+            ctx.FillRectangle(
+                &D2D_RECT_F {
+                    left: pad * s,
+                    top: 176.0 * s,
+                    right: 392.0 * s,
+                    bottom: 177.0 * s,
+                },
+                &divider,
+            );
+
+            let chip_bg = solid(ctx, &theme::rgb(theme::color::BG_INTERACTIVE, 0.75))?;
+            let chip_border = solid(ctx, &theme::rgb(theme::color::VIOLET_800, 0.45))?;
+            for (rect, label, active) in [
+                (hits.focus, "FOCUS", p.focus_running),
+                (hits.battery, "BATTERY", false),
+                (hits.record, "RECORD", false),
+                (hits.theme, "THEME", false),
+            ] {
+                let rr = D2D1_ROUNDED_RECT {
+                    rect: scaled_rect(rect.x, rect.y, rect.w, rect.h, s),
+                    radiusX: 10.0 * s,
+                    radiusY: 10.0 * s,
+                };
+                if active {
+                    let fill = solid(ctx, &theme::rgb(theme::color::ACCENT_PRIMARY, 0.22))?;
+                    ctx.FillRoundedRectangle(&rr, &fill);
+                } else {
+                    ctx.FillRoundedRectangle(&rr, &chip_bg);
+                }
+                ctx.DrawRoundedRectangle(&rr, &chip_border, 1.0, None);
+                let brush = if active { &accent } else { &secondary };
+                draw_text(
+                    ctx,
+                    label,
+                    &self.fmt_tab,
+                    scaled_rect(rect.x, rect.y, rect.w, rect.h, s),
+                    brush,
+                );
+            }
+
+            draw_text(
+                ctx,
+                "FOCUS + AKSI SISTEM",
+                &self.fmt_status,
+                scaled_rect(pad, 306.0, 260.0, 12.0, s),
+                &secondary,
+            );
+
+            draw_text(ctx, "FILE SHELF", &self.fmt_status, scaled_rect(pad, 372.0, 220.0, 14.0, s), &secondary);
+            let clear_brush = solid(ctx, &theme::rgb(theme::color::TEXT_MUTED, 1.0))?;
+            draw_text(
+                ctx,
+                "CLEAR",
+                &self.fmt_tab,
+                scaled_rect(hits.clear.x, hits.clear.y, hits.clear.w, hits.clear.h, s),
+                &clear_brush,
+            );
+
+            if p.shelf_paths.is_empty() {
+                let empty = solid(ctx, &theme::rgb(theme::color::TEXT_MUTED, 1.0))?;
+                draw_text(
+                    ctx,
+                    "Drag files here.",
+                    &self.fmt_body,
+                    scaled_rect(pad, 400.0, 300.0, 18.0, s),
+                    &empty,
+                );
+            }
+
+            for (index, path) in p.shelf_paths.iter().take(5).enumerate() {
+                let row = hits.rows[index];
+                let name = std::path::Path::new(path)
+                    .file_name()
+                    .map(|name| name.to_string_lossy().to_string())
+                    .unwrap_or_else(|| path.clone());
+                draw_text(ctx, &name, &self.fmt_small, scaled_rect(row.x, row.y, row.w - 48.0, row.h, s), &primary);
+                draw_text(
+                    ctx,
+                    "OPEN",
+                    &self.fmt_tab,
+                    scaled_rect(row.x + row.w - 44.0, row.y, 44.0, row.h, s),
+                    &clear_brush,
+                );
+                if index < 4 {
+                    ctx.FillRectangle(
+                        &D2D_RECT_F {
+                            left: row.x * s,
+                            top: (row.y + row.h) * s,
+                            right: (row.x + row.w) * s,
+                            bottom: (row.y + row.h + 1.0) * s,
+                        },
+                        &divider,
+                    );
+                }
+            }
         }
         Ok(())
     }

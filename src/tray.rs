@@ -27,6 +27,7 @@ pub const CMD_OPACITY_100: usize = 9;
 pub const CMD_FULLSCREEN: usize = 10;
 pub const CMD_LAYOUT_PANEL: usize = 11;
 pub const CMD_LAYOUT_WIDE: usize = 12;
+pub const CMD_LAYOUT_CARDS: usize = 13;
 
 pub struct MenuState {
     pub notch: bool,
@@ -110,8 +111,14 @@ pub fn show_menu(owner: HWND, state: &MenuState) -> Result<()> {
         } else {
             MF_STRING
         };
+        let cards_flags = if state.layout == crate::state::Layout::Cards {
+            MF_STRING | MF_CHECKED
+        } else {
+            MF_STRING
+        };
         AppendMenuW(layout_menu, panel_flags, CMD_LAYOUT_PANEL, w!("Panel"))?;
         AppendMenuW(layout_menu, wide_flags, CMD_LAYOUT_WIDE, w!("Wide bar"))?;
+        AppendMenuW(layout_menu, cards_flags, CMD_LAYOUT_CARDS, w!("Cards"))?;
         AppendMenuW(menu, MF_POPUP, layout_menu.0 as usize, w!("Layout"))?;
 
         let glass = CreatePopupMenu()?;

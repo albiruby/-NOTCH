@@ -8,11 +8,12 @@ kompositor Windows, jadi aplikasi hanya menggambar ketika ada yang berubah.
 
 ## Status
 
-v1.2 — launcher apps. Yang sudah ada:
+v1.3 — kartu desktop. Yang sudah ada:
 
-**Dua layout**
-- `Panel` (default): panel vertikal dengan 6 halaman.
+**Tiga layout**
+- `Panel` (default): panel vertikal dengan 7 halaman.
 - `Wide bar`: satu bar panjang berisi artwork, judul/artis, transport, progress, CPU/RAM/baterai, dan jam. Klik bar untuk membuka panel halaman penuh; setelah panel ditutup, bar lebar kembali otomatis.
+- `Cards`: dua kartu mengambang di kanan bawah. Quick Controls berisi volume, brightness, Wi-Fi/BT, Focus, Battery, Record, dan Theme. File Shelf berisi path file yang di-drag, klik untuk membuka, Clear untuk mengosongkan.
 - Pilih lewat tray → **Layout**.
 
 **Bentuk dan perilaku**
@@ -127,6 +128,10 @@ Untuk pengujian, `notch.exe --expanded` langsung membuka panel tanpa hover.
 | --- | --- |
 | Hover pill | Buka panel atau wide bar sesuai layout |
 | Klik wide bar | Buka panel halaman penuh |
+| Drag slider di kartu | Ubah volume/brightness |
+| Klik chip Focus | Start/pause timer fokus |
+| Klik Battery / Record / Theme | Buka setting baterai / Game Bar / warna Windows |
+| Drag file ke kartu Shelf | Tambah path ke shelf |
 | Klik tab | Ganti halaman |
 | Klik progress bar | Seek |
 | Klik artwork / judul | Tidak ada aksi (placeholder untuk player switch) |
@@ -152,7 +157,7 @@ Dibuat otomatis di `%APPDATA%\Notch\`.
 
 | Field | Arti |
 | --- | --- |
-| `layout` | `panel` (default) atau `wide` |
+| `layout` | `panel` (default), `wide`, atau `cards` |
 | `opacity` | Opasitas background (0.2–1.0) |
 | `compact_width` / `compact_height` | Ukuran pill |
 | `expanded_width` / `expanded_height` | Ukuran panel |
@@ -197,9 +202,10 @@ Mulai dari `design-system/README.md`.
 
 ## Batasan yang diketahui
 
-- Preset `NOTCH Desktop Overview` (command palette, notification center, AI cockpit
-  dengan data nyata, meeting, ambient orb, dock) belum diimplementasikan. Yang
-  sudah ada adalah top bar-nya dan seluruh halaman fungsional di panel.
+- Preset `NOTCH Desktop Overview` belum lengkap. Yang sudah ada: top bar (Wide),
+  dua kartu Quick Controls + File Shelf (Cards), dan launcher APPS. Command palette
+  dengan pencarian, notification center, AI cockpit dengan data nyata, meeting,
+  ambient orb, dan dock belum ada.
 - Backdrop blur belum ada. Glass saat ini memakai tint transparan tanpa blur
   karena surface DirectComposition belum punya jalur capture di belakangnya.
 - Membaca notifikasi aplikasi lain butuh identitas paket Microsoft Store; tidak

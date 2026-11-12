@@ -32,6 +32,7 @@ Enam prinsip:
 
 | Komponen | Aturan |
 | --- | --- |
+| Cards | Dua surface 400 DIP, radius 20, jarak 16 DIP; Quick Controls 330 DIP, File Shelf 198 DIP |
 | Wide bar | Tinggi 140 DIP, lebar 900 DIP; media 0..560, metrik CPU/RAM/baterai 576..764, jam rata kanan 778..878 |
 | Tab bar | 7 tab, lebar 60 DIP, label MICRO semibold, underline violet 2 px hanya di tab aktif |
 | Task row | Checkbox 12 DIP, teks LABEL, task selesai diredupkan ke 35% |
