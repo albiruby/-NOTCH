@@ -1,0 +1,464 @@
+//! Geometry and animation state for the notch surface.
+//!
+//! All values are in device-independent pixels (DIP). The renderer scales them
+//! by the monitor DPI before drawing.
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Phase {
+    Compact,
+    Expanded,
+}
+
+use serde::{Deserialize, Serialize};
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum SurfaceMode {
+    /// Classic notch: attached to the top edge, square top corners, rounded bottom.
+    Notch,
+    /// Dynamic island: floating pill with a gap from the top edge.
+    Island,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum Layout {
+    /// Vertical panel with paged content.
+    #[default]
+    Panel,
+    /// One wide bar with media, metrics, and clock.
+    Wide,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct Metrics {
+    pub surface_w: f32,
+    pub surface_h: f32,
+    pub compact_w: f32,
+    pub compact_h: f32,
+    pub compact_r: f32,
+    pub expanded_w: f32,
+    pub expanded_h: f32,
+    pub expanded_r: f32,
+    pub top_gap: f32,
+    pub square_top: bool,
+}
+
+impl Default for Metrics {
+    fn default() -> Self {
+        Self::from_settings(&crate::settings::Settings::default())
+    }
+}
+
+impl Metrics {
+    pub fn from_settings(settings: &crate::settings::Settings) -> Self {
+        Self::for_layout(settings, settings.layout)
+    }
+
+    pub fn for_layout(settings: &crate::settings::Settings, layout: Layout) -> Self {
+        let compact_h = settings.compact_height.max(20.0);
+        let mode = settings.mode;
+        let square_top = mode == SurfaceMode::Notch;
+        let (surface_w, surface_h, expanded_w, expanded_h, expanded_r) =
+            if layout == Layout::Wide {
+                // One wide bar: media, transport, metrics, and clock in a row.
+                (996.0, 188.0, 900.0, 140.0, 28.0)
+            } else {
+                // The expanded panel has a fixed content layout, so it never
+                // shrinks below the height that layout needs.
+                let expanded_h = settings.expanded_height.max(300.0);
+                (
+                    (settings.expanded_width + 96.0).max(420.0),
+                    expanded_h + 48.0,
+                    settings.expanded_width.max(300.0),
+                    expanded_h,
+                    crate::theme::radius::XL,
+                )
+            };
+        Self {
+            surface_w,
+            surface_h,
+            compact_w: settings.compact_width.max(120.0),
+            compact_h,
+            compact_r: compact_h * 0.5,
+            expanded_w,
+            expanded_h,
+            expanded_r,
+            top_gap: if square_top { 0.0 } else { 10.0 },
+            square_top,
+        }
+    }
+}
+
+/// A rounded rectangle in window-relative DIP coordinates.
+#[derive(Clone, Copy, Debug)]
+pub struct Shape {
+    pub x: f32,
+    pub y: f32,
+    pub w: f32,
+    pub h: f32,
+    pub r: f32,
+}
+
+impl Shape {
+    pub fn right(&self) -> f32 {
+        self.x + self.w
+    }
+
+    pub fn bottom(&self) -> f32 {
+        self.y + self.h
+    }
+
+    /// Point-in-shape test, including the rounded corners.
+    pub fn contains(&self, px: f32, py: f32) -> bool {
+        if px < self.x || px > self.right() || py < self.y || py > self.bottom() {
+            return false;
+        }
+
+        let r = self.r.max(0.0);
+        if r == 0.0 {
+            return true;
+        }
+
+        let cx = px.clamp(self.x + r, self.right() - r);
+        let cy = py.clamp(self.y + r, self.bottom() - r);
+        let dx = px - cx;
+        let dy = py - cy;
+        dx * dx + dy * dy <= r * r
+    }
+}
+
+pub struct AppState {
+    pub phase: Phase,
+    /// 0.0 = compact, 1.0 = expanded.
+    pub t: f32,
+}
+
+impl AppState {
+    pub fn new() -> Self {
+        Self {
+            phase: Phase::Compact,
+            t: 0.0,
+        }
+    }
+
+    pub fn shape(&self, m: &Metrics) -> Shape {
+        let t = self.t.clamp(0.0, 1.0);
+
+        // In notch mode the shape is pushed above the surface by its radius so
+        // the top edge is clipped square and only the bottom corners are round.
+        let (compact_y, compact_h) = if m.square_top {
+            (-m.compact_r, m.compact_h + m.compact_r)
+        } else {
+            (m.top_gap, m.compact_h)
+        };
+        let (expanded_y, expanded_h) = if m.square_top {
+            (-m.expanded_r, m.expanded_h + m.expanded_r)
+        } else {
+            (m.top_gap, m.expanded_h)
+        };
+
+        let w = lerp(m.compact_w, m.expanded_w, t);
+        let h = lerp(compact_h, expanded_h, t);
+        let y = lerp(compact_y, expanded_y, t);
+        let r = lerp(m.compact_r, m.expanded_r, t);
+        let x = (m.surface_w - w) * 0.5;
+
+        Shape { x, y, w, h, r }
+    }
+
+    /// Visible bounds used for hit testing (the part inside the surface).
+    pub fn hit_shape(&self, m: &Metrics) -> Shape {
+        let mut s = self.shape(m);
+        if s.y < 0.0 {
+            s.h += s.y;
+            s.y = 0.0;
+        }
+        s
+    }
+}
+
+fn lerp(a: f32, b: f32, t: f32) -> f32 {
+    a + (b - a) * t
+}
+
+/// Monotonic id used to signal "this payload changed" across threads without
+/// hashing the payload itself.
+pub fn next_id() -> u64 {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static NEXT: AtomicU64 = AtomicU64::new(1);
+    NEXT.fetch_add(1, Ordering::Relaxed)
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum OverlayKind {
+    Volume,
+    Caps,
+    Water,
+    Copied,
+}
+
+/// Transient compact-pill content shown after a hardware key event.
+#[derive(Clone, Copy, Debug)]
+pub struct Overlay {
+    pub kind: OverlayKind,
+    pub value: f32,
+    pub muted: bool,
+    pub on: bool,
+    pub goal: u32,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct Rect {
+    pub x: f32,
+    pub y: f32,
+    pub w: f32,
+    pub h: f32,
+}
+
+impl Rect {
+    pub fn contains(&self, px: f32, py: f32) -> bool {
+        px >= self.x && px <= self.x + self.w && py >= self.y && py <= self.y + self.h
+    }
+}
+
+pub struct Tabs {
+    pub overview: Rect,
+    pub controls: Rect,
+    pub focus: Rect,
+    pub tasks: Rect,
+    pub shelf: Rect,
+    pub clip: Rect,
+    pub apps: Rect,
+}
+
+pub fn tabs(shape: &Shape) -> Tabs {
+    let top = shape.y.max(0.0);
+    let cx = shape.x + shape.w * 0.5;
+    let y = top + 262.0;
+    let (w, gap) = (60.0, 4.0);
+    let start = cx - (w * 7.0 + gap * 6.0) * 0.5;
+    let make = |index: usize| Rect {
+        x: start + index as f32 * (w + gap),
+        y,
+        w,
+        h: 22.0,
+    };
+    Tabs {
+        overview: make(0),
+        controls: make(1),
+        focus: make(2),
+        tasks: make(3),
+        shelf: make(4),
+        clip: make(5),
+        apps: make(6),
+    }
+}
+
+pub fn task_row(shape: &Shape, index: usize) -> Rect {
+    let top = shape.y.max(0.0);
+    Rect {
+        x: shape.x + 24.0,
+        y: top + 112.0 + index as f32 * 22.0,
+        w: shape.w - 48.0,
+        h: 20.0,
+    }
+}
+
+pub fn task_add(shape: &Shape) -> Rect {
+    let top = shape.y.max(0.0);
+    Rect {
+        x: shape.x + 24.0,
+        y: top + 202.0,
+        w: shape.w - 48.0,
+        h: 20.0,
+    }
+}
+
+pub fn water_dot(shape: &Shape, index: usize) -> Rect {
+    let top = shape.y.max(0.0);
+    let count = 8usize;
+    let step = 16.0;
+    let start = shape.x + shape.w * 0.5 - (count as f32 - 1.0) * step * 0.5;
+    Rect {
+        x: start + index as f32 * step - 6.0,
+        y: top + 228.0,
+        w: 12.0,
+        h: 16.0,
+    }
+}
+
+pub fn clip_row(shape: &Shape, index: usize) -> Rect {
+    let top = shape.y.max(0.0);
+    Rect {
+        x: shape.x + 24.0,
+        y: top + 114.0 + index as f32 * 24.0,
+        w: shape.w - 48.0,
+        h: 22.0,
+    }
+}
+
+pub fn clip_clear(shape: &Shape) -> Rect {
+    let top = shape.y.max(0.0);
+    Rect {
+        x: shape.right() - 84.0,
+        y: top + 94.0,
+        w: 60.0,
+        h: 16.0,
+    }
+}
+
+pub fn focus_toggle(shape: &Shape) -> Rect {
+    let top = shape.y.max(0.0);
+    Rect {
+        x: shape.x + 60.0,
+        y: top + 70.0,
+        w: shape.w - 120.0,
+        h: 140.0,
+    }
+}
+
+pub fn focus_reset(shape: &Shape) -> Rect {
+    let top = shape.y.max(0.0);
+    let cx = shape.x + shape.w * 0.5;
+    Rect {
+        x: cx - 50.0,
+        y: top + 214.0,
+        w: 100.0,
+        h: 24.0,
+    }
+}
+
+pub fn progress_bar(shape: &Shape) -> Rect {
+    let top = shape.y.max(0.0);
+    Rect {
+        x: shape.x + 24.0,
+        y: top + 88.0,
+        w: shape.w - 48.0,
+        h: 18.0,
+    }
+}
+
+pub struct Transport {
+    pub prev: Rect,
+    pub play: Rect,
+    pub next: Rect,
+}
+
+pub struct Controls {
+    pub volume: Rect,
+    pub brightness: Rect,
+}
+
+/// Quick controls share one layout between the renderer and hit testing.
+///
+/// These rects live on the Controls page only. Their y positions must match
+/// the labels and bars drawn at `ctrl_y` in the renderer.
+pub fn controls(shape: &Shape) -> Controls {
+    let top = shape.y.max(0.0);
+    let pad = 24.0;
+    Controls {
+        volume: Rect {
+            x: shape.x + pad,
+            y: top + 94.0,
+            w: shape.w - pad * 2.0,
+            h: 34.0,
+        },
+        brightness: Rect {
+            x: shape.x + pad,
+            y: top + 128.0,
+            w: shape.w - pad * 2.0,
+            h: 34.0,
+        },
+    }
+}
+
+pub struct WideLayout {
+    pub progress: Rect,
+    pub prev: Rect,
+    pub play: Rect,
+    pub next: Rect,
+}
+
+/// Hit rects for the wide bar. Coordinates mirror the renderer's bar layout.
+pub fn wide_layout(shape: &Shape) -> WideLayout {
+    let top = shape.y.max(0.0);
+    let size = 32.0;
+    let center_y = top + 50.0;
+    let make = |center_x: f32| Rect {
+        x: shape.x + center_x - size * 0.5,
+        y: center_y - size * 0.5,
+        w: size,
+        h: size,
+    };
+    WideLayout {
+        progress: Rect {
+            x: shape.x + 84.0,
+            y: top + 70.0,
+            w: 276.0,
+            h: 18.0,
+        },
+        prev: make(440.0),
+        play: make(484.0),
+        next: make(528.0),
+    }
+}
+
+/// Transport buttons share one layout between the renderer and hit testing.
+pub fn transport(shape: &Shape) -> Transport {
+    let top = shape.y.max(0.0);
+    let cx = shape.x + shape.w * 0.5;
+    let cy = top + 136.0;
+    let size = 32.0;
+    let gap = 52.0;
+    let make = |center: f32| Rect {
+        x: center - size * 0.5,
+        y: cy - size * 0.5,
+        w: size,
+        h: size,
+    };
+    Transport {
+        prev: make(cx - gap),
+        play: make(cx),
+        next: make(cx + gap),
+    }
+}
+
+/// Critically damped spring, stepped at whatever rate the frame loop runs at.
+/// No fixed duration, so a delayed frame never stretches the animation.
+pub struct Spring {
+    pub value: f32,
+    target: f32,
+    velocity: f32,
+}
+
+impl Spring {
+    pub fn new(value: f32) -> Self {
+        Self {
+            value,
+            target: value,
+            velocity: 0.0,
+        }
+    }
+
+    pub fn set_target(&mut self, target: f32) {
+        self.target = target;
+    }
+
+    /// Returns true while the spring is still moving.
+    pub fn step(&mut self, dt: f32) -> bool {
+        let omega = crate::theme::motion::SPRING_OMEGA;
+        let x = self.value - self.target;
+        let accel = -omega * omega * x - 2.0 * omega * self.velocity;
+        self.velocity += accel * dt;
+        self.value += self.velocity * dt;
+
+        if x.abs() < 0.003 && self.velocity.abs() < 0.05 {
+            self.value = self.target;
+            self.velocity = 0.0;
+            false
+        } else {
+            true
+        }
+    }
+}

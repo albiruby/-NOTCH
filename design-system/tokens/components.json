@@ -1,0 +1,72 @@
+{
+  "$schema": "notch.design-system.components/1",
+  "version": "1.0.0",
+  "button": {
+    "primary": {
+      "background": "{color.accent.primary}",
+      "backgroundHover": "{color.accent.hover}",
+      "backgroundActive": "{color.accent.active}",
+      "label": "{color.graphite.950}",
+      "radius": "{radius.sm}",
+      "height": "{size.control.standard}"
+    },
+    "secondary": {
+      "background": "{color.bg.elevated}",
+      "backgroundHover": "{color.bg.interactive}",
+      "border": "{color.border.subtle}",
+      "label": "{color.text.primary}",
+      "radius": "{radius.sm}",
+      "height": "{size.control.standard}"
+    },
+    "ghost": {
+      "background": "transparent",
+      "backgroundHover": "{color.bg.interactive}",
+      "label": "{color.text.secondary}",
+      "radius": "{radius.sm}"
+    }
+  },
+  "metric": {
+    "label": {
+      "font": "{typography.family.ui}",
+      "size": "{typography.scale.label.size}",
+      "weight": "{typography.scale.label.weight}",
+      "color": "{color.text.secondary}"
+    },
+    "value": {
+      "font": "{typography.family.mono}",
+      "size": "{typography.scale.label.size}",
+      "weight": 600,
+      "color": "{color.text.primary}"
+    },
+    "track": {
+      "color": "{color.graphite.700}",
+      "height": 3,
+      "radius": "{radius.xs}"
+    },
+    "fill": {
+      "color": "{color.accent.primary}",
+      "colorWarning": "{color.state.warning}",
+      "colorDanger": "{color.state.danger}"
+    },
+    "thresholds": { "warning": 85, "danger": 95 }
+  },
+  "panel": {
+    "background": "{color.bg.surface}",
+    "border": "{color.border.subtle}",
+    "radius": "{radius.xl}",
+    "padding": "{space.6}",
+    "highlight": "{glass.highlightOpacity}"
+  },
+  "pill": {
+    "background": "{color.bg.surface}",
+    "radius": "{radius.pill}",
+    "height": 34,
+    "paddingInline": "{space.4}"
+  },
+  "notification": {
+    "background": "{color.bg.elevated}",
+    "border": "{color.border.subtle}",
+    "radius": "{radius.lg}",
+    "elevation": 2
+  }
+}

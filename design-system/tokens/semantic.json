@@ -1,0 +1,37 @@
+{
+  "$schema": "notch.design-system.semantic/1",
+  "version": "1.0.0",
+  "color": {
+    "bg": {
+      "canvas": "{color.graphite.950}",
+      "base": "{color.graphite.900}",
+      "surface": "{color.graphite.800}",
+      "interactive": "{color.graphite.750}",
+      "elevated": "{color.graphite.700}"
+    },
+    "text": {
+      "primary": "{color.graphite.100}",
+      "secondary": "{color.graphite.300}",
+      "muted": "{color.graphite.400}",
+      "disabled": "{color.graphite.500}"
+    },
+    "border": {
+      "subtle": "{color.graphite.600}",
+      "strong": "{color.graphite.500}",
+      "focus": "{color.violet.600}"
+    },
+    "accent": {
+      "primary": "{color.violet.600}",
+      "hover": "{color.violet.500}",
+      "active": "{color.violet.700}",
+      "subtle": "{color.violet.900}",
+      "border": "{color.violet.800}"
+    },
+    "state": {
+      "success": "{color.state.success}",
+      "warning": "{color.state.warning}",
+      "danger": "{color.state.danger}",
+      "info": "{color.state.info}"
+    }
+  }
+}
