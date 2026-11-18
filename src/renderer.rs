@@ -77,6 +77,7 @@ pub struct DrawParams {
     pub mode: crate::state::SurfaceMode,
     pub privacy: crate::privacy::Privacy,
     pub activities: Vec<crate::activity::Activity>,
+    pub ai: crate::ai::Snapshot,
 }
 
 pub struct Renderer {
@@ -2082,6 +2083,118 @@ impl Renderer {
         Ok(())
     }
 
+    /// AI Developer Cockpit card: per-provider month-to-date spend, budget
+    /// bar and a daily spend sparkline.
+    fn draw_ai_card(&self, p: &DrawParams, card: crate::state::Rect, s: f32) -> Result<()> {
+        use crate::ai_report::compact;
+        let ai = &p.ai;
+        unsafe {
+            let ctx = &self.ctx;
+            let primary = solid(ctx, &theme::rgb(theme::accent::text1(), 1.0))?;
+            let secondary = solid(ctx, &theme::rgb(theme::accent::text2(), 1.0))?;
+            let muted = solid(ctx, &theme::rgb(theme::accent::muted(), 1.0))?;
+            let (x, y) = (card.x, card.y);
+            draw_text(ctx, "AI Developer Cockpit", &self.fmt_card_title, scaled_rect(x + 20.0, y + 12.0, 240.0, 22.0, s), &primary);
+
+            let configured = ai.configured();
+            let (status, color) = if !configured {
+                ("Setup", theme::accent::muted())
+            } else if ai.updated.is_some() {
+                ("Live", theme::color::SUCCESS)
+            } else {
+                ("Loading", theme::color::WARNING)
+            };
+            let chip = scaled_rect(x + card.w - 84.0, y + 13.0, 64.0, 22.0, s);
+            draw_glass(ctx, chip, 11.0 * s, 1.0, Glass::Tile, s)?;
+            let dot = solid(ctx, &theme::rgb(color, 1.0))?;
+            ctx.FillEllipse(&circle((x + card.w - 72.0) * s, (y + 24.0) * s, 3.5 * s), &dot);
+            draw_text(ctx, status, &self.fmt_tab, scaled_rect(x + card.w - 64.0, y + 13.0, 44.0, 22.0, s), &secondary);
+
+            if !configured {
+                draw_text(ctx, "Add an admin key to track spend:", &self.fmt_small, scaled_rect(x + 20.0, y + 48.0, card.w - 40.0, 16.0, s), &muted);
+                for (i, line) in [
+                    "notch key set claude sk-ant-admin…",
+                    "notch key set openai sk-admin-…",
+                    "notch key set deepseek sk-…",
+                    "notch ai budget 200",
+                ]
+                .iter()
+                .enumerate()
+                {
+                    draw_text(ctx, line, &self.fmt_small, scaled_rect(x + 20.0, y + 74.0 + i as f32 * 22.0, card.w - 40.0, 18.0, s), &secondary);
+                }
+                draw_text(ctx, "Keys stay in Windows Credential Manager.", &self.fmt_small, scaled_rect(x + 20.0, y + 168.0, card.w - 40.0, 16.0, s), &muted);
+                return Ok(());
+            }
+
+            // Provider tiles.
+            let gap = 8.0;
+            let tile_w = (card.w - 40.0 - gap * 2.0) / 3.0;
+            for (i, (provider, stat)) in ai.stats.iter().enumerate().take(3) {
+                let tx = x + 20.0 + i as f32 * (tile_w + gap);
+                let ty = y + 44.0;
+                draw_glass(ctx, scaled_rect(tx, ty, tile_w, 66.0, s), 12.0 * s, 1.0, Glass::Tile, s)?;
+                draw_text(ctx, provider.label(), &self.fmt_small, scaled_rect(tx + 10.0, ty + 6.0, tile_w - 20.0, 16.0, s), &muted);
+                let value = if !stat.configured {
+                    "—".to_string()
+                } else if let Some(cost) = stat.cost {
+                    format!("${cost:.2}")
+                } else if let Some(balance) = &stat.balance {
+                    balance.clone()
+                } else {
+                    "…".to_string()
+                };
+                draw_text(ctx, &value, &self.fmt_wide_title, scaled_rect(tx + 10.0, ty + 24.0, tile_w - 20.0, 20.0, s), &primary);
+                let (sub, sub_brush) = if !stat.configured {
+                    ("no key".to_string(), &muted)
+                } else if let Some(err) = &stat.error {
+                    (err.clone(), &muted)
+                } else if let Some(tokens) = stat.tokens {
+                    (format!("{} tokens", compact(tokens)), &secondary)
+                } else if stat.balance.is_some() {
+                    ("balance".to_string(), &secondary)
+                } else {
+                    (String::new(), &muted)
+                };
+                if stat.error.is_some() && stat.configured {
+                    let warn = solid(ctx, &theme::rgb(theme::color::WARNING, 1.0))?;
+                    draw_text(ctx, &sub, &self.fmt_small, scaled_rect(tx + 10.0, ty + 46.0, tile_w - 16.0, 14.0, s), &warn);
+                } else {
+                    draw_text(ctx, &sub, &self.fmt_small, scaled_rect(tx + 10.0, ty + 46.0, tile_w - 16.0, 14.0, s), sub_brush);
+                }
+            }
+
+            // Budget / month-to-date line.
+            let total = ai.total();
+            let days_left = ai.month.days_left();
+            let bar_y = y + 122.0;
+            if ai.budget > 0.0 {
+                let ratio = (total / ai.budget) as f32;
+                draw_slider(ctx, x + 20.0, bar_y, card.w - 40.0, ratio.min(1.0), false, s, 1.0)?;
+                let label = format!("{:.0}% of ${:.0} budget  ·  ${total:.2}", ratio * 100.0, ai.budget);
+                let brush = if ratio >= 1.0 {
+                    solid(ctx, &theme::rgb(theme::color::DANGER, 1.0))?
+                } else {
+                    primary.clone()
+                };
+                draw_text(ctx, &label, &self.fmt_small, scaled_rect(x + 20.0, bar_y + 8.0, card.w - 140.0, 16.0, s), &brush);
+            } else {
+                draw_text(ctx, &format!("Month to date  ${total:.2}"), &self.fmt_small, scaled_rect(x + 20.0, bar_y + 2.0, card.w - 140.0, 16.0, s), &primary);
+            }
+            draw_text(
+                ctx,
+                &format!("~{days_left} days left"),
+                &self.fmt_time_right,
+                scaled_rect(x + card.w - 140.0, bar_y + 8.0, 120.0, 16.0, s),
+                &muted,
+            );
+
+            // Daily spend sparkline.
+            draw_sparkline(ctx, &ai.daily(), x + 20.0, y + 152.0, card.w - 40.0, 44.0, s)?;
+        }
+        Ok(())
+    }
+
     /// Hub overlay: every widget at once, fading and sliding in with `p.t`.
     fn draw_hub(&self, p: &DrawParams) -> Result<()> {
         use crate::state::hub;
@@ -2247,7 +2360,7 @@ impl Renderer {
                 ctx,
                 &format!("{:02}:{:02}", remaining / 60, remaining % 60),
                 &self.fmt_focus,
-                scaled_rect(f.x + 12.0, f.y + 40.0, 196.0, 64.0, s),
+                scaled_rect(f.x + 8.0, f.y + 40.0, 150.0, 64.0, s),
                 &primary,
             );
             for (rect, label) in [
@@ -2258,6 +2371,9 @@ impl Renderer {
                 draw_text(ctx, label, &self.fmt_tab, scaled_rect(rect.x, rect.y, rect.w, rect.h, s), &primary);
             }
             draw_slider(ctx, f.x + 20.0, f.y + 124.0, f.w - 40.0, 1.0 - p.focus_remaining / 1500.0, false, s, 1.0)?;
+
+            // AI Developer Cockpit.
+            self.draw_ai_card(p, hub::ai(), s)?;
 
             // Live Activities, under the media card.
             if let Some(card) = hub::activities(p.activities.len()) {
@@ -3041,5 +3157,48 @@ unsafe fn draw_activity_row(
         );
         draw_slider(ctx, text_x, row.y + 36.0, row.w - 44.0, progress, false, s, 1.0)?;
     }
+    Ok(())
+}
+
+/// Daily-spend sparkline: accent line over a faint filled area.
+unsafe fn draw_sparkline(
+    ctx: &ID2D1DeviceContext,
+    values: &[f64],
+    x: f32,
+    y: f32,
+    w: f32,
+    h: f32,
+    s: f32,
+) -> Result<()> {
+    let base = solid(ctx, &theme::rgb(theme::accent::light(), 0.08))?;
+    ctx.FillRectangle(&scaled_rect(x, y + h, w, 1.0, s), &base);
+    if values.len() < 2 {
+        return Ok(());
+    }
+    let max = values.iter().cloned().fold(0.0f64, f64::max).max(0.01);
+    let step = w / (values.len() - 1) as f32;
+    let point = |i: usize| Vector2 {
+        X: (x + step * i as f32) * s,
+        Y: (y + h - (values[i] / max) as f32 * h) * s,
+    };
+    let column = solid(ctx, &theme::rgb(theme::accent::c600(), 0.10))?;
+    for i in 0..values.len() {
+        let p = point(i);
+        ctx.FillRectangle(
+            &D2D_RECT_F {
+                left: p.X - step * 0.5 * s,
+                top: p.Y,
+                right: p.X + step * 0.5 * s,
+                bottom: (y + h) * s,
+            },
+            &column,
+        );
+    }
+    let line = solid(ctx, &theme::rgb(theme::accent::c500(), 1.0))?;
+    for i in 1..values.len() {
+        ctx.DrawLine(point(i - 1), point(i), &line, 1.8 * s, None);
+    }
+    let last = point(values.len() - 1);
+    ctx.FillEllipse(&circle(last.X, last.Y, 3.0 * s), &line);
     Ok(())
 }

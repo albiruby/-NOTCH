@@ -8,13 +8,7 @@ use std::sync::{Mutex, OnceLock};
 use std::thread;
 use std::time::Duration;
 
-use windows::core::{PCWSTR, w};
 use windows::Win32::Foundation::HWND;
-use windows::Win32::Networking::WinHttp::{
-    WinHttpCloseHandle, WinHttpConnect, WinHttpOpen, WinHttpOpenRequest, WinHttpQueryDataAvailable,
-    WinHttpReadData, WinHttpReceiveResponse, WinHttpSendRequest, WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
-    WINHTTP_FLAG_SECURE,
-};
 use windows::Win32::UI::WindowsAndMessaging::{PostMessageW, WM_APP};
 
 pub const WM_APP_LYRICS: u32 = WM_APP + 8;
@@ -206,84 +200,9 @@ fn encode(text: &str) -> String {
 }
 
 fn http_get(host: &str, path: &str) -> Option<String> {
-    let host_w: Vec<u16> = host.encode_utf16().chain(std::iter::once(0)).collect();
-    let path_w: Vec<u16> = path.encode_utf16().chain(std::iter::once(0)).collect();
-    unsafe {
-        let session = WinHttpOpen(
-            w!("NOTCH/1.0"),
-            WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
-            PCWSTR::null(),
-            PCWSTR::null(),
-            0,
-        );
-        if session.is_null() {
-            return None;
-        }
-        let connect = WinHttpConnect(session, PCWSTR::from_raw(host_w.as_ptr()), 443, 0);
-        if connect.is_null() {
-            let _ = WinHttpCloseHandle(session);
-            return None;
-        }
-        let request = WinHttpOpenRequest(
-            connect,
-            w!("GET"),
-            PCWSTR::from_raw(path_w.as_ptr()),
-            PCWSTR::null(),
-            PCWSTR::null(),
-            std::ptr::null(),
-            WINHTTP_FLAG_SECURE,
-        );
-        if request.is_null() {
-            let _ = WinHttpCloseHandle(connect);
-            let _ = WinHttpCloseHandle(session);
-            return None;
-        }
-
-        let mut body = Vec::new();
-        let sent = WinHttpSendRequest(request, None, None, 0, 0, 0);
-        if sent.is_ok()
-            && WinHttpReceiveResponse(request, std::ptr::null_mut()).is_ok()
-        {
-            loop {
-                let mut available = 0u32;
-                if WinHttpQueryDataAvailable(request, &mut available).is_err()
-                    || available == 0
-                {
-                    break;
-                }
-                let mut chunk = vec![0u8; available as usize];
-                let mut read = 0u32;
-                if WinHttpReadData(
-                    request,
-                    chunk.as_mut_ptr() as *mut core::ffi::c_void,
-                    available,
-                    &mut read,
-                )
-                .is_err()
-                {
-                    break;
-                }
-                if read == 0 {
-                    break;
-                }
-                chunk.truncate(read as usize);
-                body.extend_from_slice(&chunk);
-                if body.len() > 2 * 1024 * 1024 {
-                    break;
-                }
-            }
-        }
-
-        let _ = WinHttpCloseHandle(request);
-        let _ = WinHttpCloseHandle(connect);
-        let _ = WinHttpCloseHandle(session);
-
-        if body.is_empty() {
-            None
-        } else {
-            Some(String::from_utf8_lossy(&body).to_string())
-        }
-    }
+    crate::http::get(host, path, &[])
+        .filter(|(status, body)| (200..300).contains(status) && !body.is_empty())
+        .map(|(_, body)| body)
 }
 
 fn wake() {

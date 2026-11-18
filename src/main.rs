@@ -1,14 +1,18 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod activity;
+mod ai;
+mod ai_report;
 mod apps;
 mod audio;
 mod brightness;
 mod clipboard;
+mod http;
 mod lyrics;
 mod media;
 mod netstatus;
 mod privacy;
+mod secrets;
 mod renderer;
 mod settings;
 mod shelf;
@@ -203,6 +207,7 @@ impl App {
             clip_items: self.clip_items.clone(),
             privacy: self.privacy.clone(),
             activities: self.activities.items.clone(),
+            ai: ai::snapshot(),
             editing: self.editing,
             edit_text: self.edit_text.clone(),
             opacity: self.settings.opacity.clamp(0.2, 1.0),
@@ -222,6 +227,9 @@ impl App {
         self.state.phase = phase;
         if phase == Phase::Expanded {
             self.sysmon.sample();
+            if self.layout == Layout::Hub {
+                ai::refresh_if_stale();
+            }
             media::set_active(true);
             netstatus::set_active(true);
             lyrics::set_active(true);
@@ -945,6 +953,7 @@ unsafe extern "system" fn notch_wndproc(
             netstatus::start(hwnd);
             clipboard::start(hwnd);
             lyrics::start(hwnd);
+            ai::start(hwnd);
             unsafe {
                 DragAcceptFiles(hwnd, true);
             }
@@ -1184,6 +1193,16 @@ unsafe extern "system" fn notch_wndproc(
                     app.end_task_edit(true);
                 }
             }
+            LRESULT(0)
+        }
+        ai::WM_APP_AI => {
+            if let Some(app) = app(hwnd) {
+                app.draw();
+            }
+            LRESULT(0)
+        }
+        ai::WM_APP_AI_REFRESH => {
+            ai::refresh();
             LRESULT(0)
         }
         WM_COPYDATA => {
@@ -2177,6 +2196,9 @@ fn send_activity(request: &activity::Request) -> i32 {
 
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
+    if let Some(code) = ai::cli(&args) {
+        std::process::exit(code);
+    }
     if let Some(request) = activity::parse(&args) {
         std::process::exit(send_activity(&request));
     }

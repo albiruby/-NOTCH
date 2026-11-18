@@ -8,7 +8,7 @@ kompositor Windows, jadi aplikasi hanya menggambar ketika ada yang berubah.
 
 ## Status
 
-v1.12 — indikator privasi kamera/mikrofon dan Live Activities lewat CLI. Kaca hampir bening; theme (Violet, Aurora Mint, Sunset Coral) mengubah seluruh tampilan: rona kaca, teks, track, tile, dan tepi. Mode iPhone X notch dan Dynamic Island (Pro). Hub memenuhi layar dengan tata letak lega ala referensi. Dynamic island bisa di-drag bebas dan menempel ke tepi/tengah layar. Layout Hub jadi default (klik pill, semua widget muncul). Glassmorphism penuh: permukaan tembus pandang, kilau diagonal, tepi bercahaya, bayangan lembut. Visual mengikuti referensi brand. Yang sudah ada:
+v1.13 — AI Developer Cockpit di Hub. v1.12: indikator privasi kamera/mikrofon dan Live Activities lewat CLI. Kaca hampir bening; theme (Violet, Aurora Mint, Sunset Coral) mengubah seluruh tampilan: rona kaca, teks, track, tile, dan tepi. Mode iPhone X notch dan Dynamic Island (Pro). Hub memenuhi layar dengan tata letak lega ala referensi. Dynamic island bisa di-drag bebas dan menempel ke tepi/tengah layar. Layout Hub jadi default (klik pill, semua widget muncul). Glassmorphism penuh: permukaan tembus pandang, kilau diagonal, tepi bercahaya, bayangan lembut. Visual mengikuti referensi brand. Yang sudah ada:
 
 **Empat layout**
 - `Hub` (default): klik pill, semua widget muncul sekaligus dan memenuhi layar: kolom kiri (Apps launcher, Clipboard), tengah atas (Media + CPU/RAM/baterai), kolom kanan (Focus timer, Quick Controls, File Shelf), dan dock aplikasi di bawah tengah. Bagian tengah layar dibiarkan kosong. Pill berubah jadi top bar. Klik area kosong atau top bar untuk menutup.
@@ -56,6 +56,21 @@ v1.12 — indikator privasi kamera/mikrofon dan Live Activities lewat CLI. Kaca 
   ```
 - Pill menampilkan aktivitas terbaru (ikon status, judul, persen, garis progres). Hub menampilkan sampai 3 aktivitas di kartu **Live Activities** di bawah kartu media
 - Aktivitas dengan judul yang sama diperbarui, bukan ditambah. Yang selesai/gagal hilang setelah 6 detik
+
+**AI Developer Cockpit** (Hub, kanan atas)
+- Biaya bulan berjalan dan token per penyedia: **Claude** (Usage and Cost Analytics API), **OpenAI** (Costs and Usage API organisasi), dan saldo **DeepSeek**
+- Bar anggaran bulanan, sisa hari di bulan ini, dan grafik biaya harian
+- Butuh **admin key** (bukan key biasa): Claude `sk-ant-admin...` dari Console → Admin keys; OpenAI admin key dari Organization settings
+  ```powershell
+  notch key set claude sk-ant-admin01-...
+  notch key set openai sk-admin-...
+  notch key set deepseek sk-...
+  notch ai budget 200        # USD per bulan, 0 = tanpa bar anggaran
+  notch key clear openai
+  notch ai refresh
+  ```
+- Key disimpan di **Windows Credential Manager** (`NOTCH/ai/<provider>`), tidak pernah di `settings.json`. Data diperbarui tiap 15 menit dan saat Hub dibuka jika lebih dari 5 menit
+- Catatan: data biaya Claude biasanya tertunda sekitar 4 jam (maks. 24 jam)
 
 **Produktivitas**
 - Focus timer Pomodoro 25 menit, klik untuk start/pause, reset
@@ -172,6 +187,7 @@ Dibuat otomatis di `%APPDATA%\Notch\`.
 | File | Isi |
 | --- | --- |
 | `settings.json` | mode, opacity, ukuran pill/panel, hide_on_fullscreen, show_clock |
+| `ai.json` | anggaran bulanan AI Cockpit (`budget_usd`) |
 | `tasks.json` | daftar task, jumlah air harian, target air |
 | `shelf.json` | path file yang di-drop (maksimal 8) |
 
@@ -211,6 +227,10 @@ src/
 ├─ netstatus.rs  WinRT radio status
 ├─ tasks.rs      tasks + water, JSON
 ├─ shelf.rs      file shelf, JSON
+├─ ai.rs        AI cockpit: worker, provider fetch, CLI key/budget
+├─ ai_report.rs parsing respons + tanggal (murni, ada unit test)
+├─ http.rs      HTTPS GET via WinHTTP
+├─ secrets.rs   Windows Credential Manager
 ├─ activity.rs  Live Activities + CLI push/clear
 ├─ privacy.rs   indikator kamera/mikrofon
 ├─ apps.rs       pinned taskbar / Start Menu launcher

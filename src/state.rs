@@ -621,6 +621,7 @@ pub mod hub {
     const MEDIA_W: f32 = 460.0;
     const MEDIA_H: f32 = 190.0;
     const CLIP_H: f32 = 232.0;
+    const AI_H: f32 = 214.0;
     const FOCUS_H: f32 = 150.0;
     const QUICK_H: f32 = 270.0;
     const SHELF_H: f32 = 160.0;
@@ -646,9 +647,14 @@ pub mod hub {
     pub fn clip() -> Rect {
         r(MARGIN, h() - MARGIN - CLIP_H, SIDE_W, CLIP_H)
     }
+    // Left column, top: focus timer.
+    pub fn focus() -> Rect {
+        r(MARGIN, TOP, SIDE_W, FOCUS_H)
+    }
     pub fn launcher() -> Rect {
+        let top = TOP + FOCUS_H + GAP;
         let bottom = clip().y - GAP;
-        r(MARGIN, TOP, SIDE_W, (bottom - TOP).clamp(260.0, 440.0))
+        r(MARGIN, top, SIDE_W, (bottom - top).clamp(160.0, 440.0))
     }
 
     // Centre: media + system under the top bar.
@@ -660,11 +666,12 @@ pub mod hub {
     fn right_x() -> f32 {
         w() - MARGIN - RIGHT_W
     }
-    pub fn focus() -> Rect {
-        r(right_x(), TOP, RIGHT_W, FOCUS_H)
+    /// Right column, top: AI Developer Cockpit (as in the reference).
+    pub fn ai() -> Rect {
+        r(right_x(), TOP, RIGHT_W, AI_H)
     }
     pub fn quick() -> Rect {
-        r(right_x(), TOP + FOCUS_H + GAP, RIGHT_W, QUICK_H)
+        r(right_x(), TOP + AI_H + GAP, RIGHT_W, QUICK_H)
     }
     pub fn shelf() -> Rect {
         let below_quick = quick().y + QUICK_H + GAP;
@@ -699,8 +706,8 @@ pub mod hub {
         r(m.x + 20.0, m.y + m.h + GAP + 44.0 + index as f32 * 52.0, m.w - 40.0, 44.0)
     }
 
-    pub fn cards() -> [Rect; 6] {
-        [launcher(), clip(), media(), focus(), quick(), shelf()]
+    pub fn cards() -> [Rect; 7] {
+        [launcher(), clip(), media(), focus(), ai(), quick(), shelf()]
     }
 
     /// Offsets that map the Cards-layout quick/shelf geometry into the hub.
@@ -751,10 +758,10 @@ pub mod hub {
 
     pub fn focus_toggle() -> Rect {
         let f = focus();
-        r(f.x + 220.0, f.y + 92.0, 80.0, 34.0)
+        r(f.x + f.w - 176.0, f.y + 92.0, 80.0, 34.0)
     }
     pub fn focus_reset() -> Rect {
         let f = focus();
-        r(f.x + 308.0, f.y + 92.0, 76.0, 34.0)
+        r(f.x + f.w - 88.0, f.y + 92.0, 72.0, 34.0)
     }
 }
