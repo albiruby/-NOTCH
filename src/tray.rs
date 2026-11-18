@@ -32,9 +32,13 @@ pub const CMD_LAYOUT_HUB: usize = 14;
 pub const CMD_RESET_POSITION: usize = 15;
 pub const CMD_MODE_NOTCH_X: usize = 16;
 pub const CMD_MODE_ISLAND_PRO: usize = 17;
+pub const CMD_THEME_VIOLET: usize = 18;
+pub const CMD_THEME_MINT: usize = 19;
+pub const CMD_THEME_CORAL: usize = 20;
 
 pub struct MenuState {
     pub mode: crate::state::SurfaceMode,
+    pub theme: crate::theme::accent::Theme,
     pub autostart: bool,
     pub opacity: f32,
     pub hide_on_fullscreen: bool,
@@ -131,6 +135,24 @@ pub fn show_menu(owner: HWND, state: &MenuState) -> Result<()> {
         AppendMenuW(layout_menu, wide_flags, CMD_LAYOUT_WIDE, w!("Wide bar"))?;
         AppendMenuW(layout_menu, cards_flags, CMD_LAYOUT_CARDS, w!("Cards"))?;
         AppendMenuW(menu, MF_POPUP, layout_menu.0 as usize, w!("Layout"))?;
+
+        let themes = CreatePopupMenu()?;
+        {
+            use crate::theme::accent::Theme;
+            for (id, label, value) in [
+                (CMD_THEME_VIOLET, w!("Violet"), Theme::Violet),
+                (CMD_THEME_MINT, w!("Aurora Mint (fresh)"), Theme::Mint),
+                (CMD_THEME_CORAL, w!("Sunset Coral"), Theme::Coral),
+            ] {
+                let flags = if state.theme == value {
+                    MF_STRING | MF_CHECKED
+                } else {
+                    MF_STRING
+                };
+                AppendMenuW(themes, flags, id, label)?;
+            }
+        }
+        AppendMenuW(menu, MF_POPUP, themes.0 as usize, w!("Theme"))?;
 
         let glass = CreatePopupMenu()?;
         for (id, label, value) in [

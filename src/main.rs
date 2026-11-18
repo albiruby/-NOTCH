@@ -904,6 +904,7 @@ unsafe extern "system" fn notch_wndproc(
     match msg {
         WM_CREATE => {
             let settings = Settings::load();
+            crate::theme::accent::set(settings.theme);
             let metrics = Metrics::from_settings(&settings);
             let scale = window::scale_for(hwnd);
             let width = (metrics.surface_w * scale).round() as u32;
@@ -1740,6 +1741,7 @@ unsafe extern "system" fn menu_wndproc(
                     let app = app(HWND(NOTCH_HWND.load(Ordering::Relaxed) as *mut core::ffi::c_void));
                     tray::MenuState {
                         mode: notch,
+                        theme: app.as_ref().map(|app| app.settings.theme).unwrap_or_default(),
                         autostart: tray::autostart_enabled(),
                         opacity: app
                             .as_ref()
@@ -1777,6 +1779,20 @@ unsafe extern "system" fn menu_wndproc(
                 tray::CMD_MODE_NOTCH => {
                     if let Some(app) = app(HWND(NOTCH_HWND.load(Ordering::Relaxed) as *mut core::ffi::c_void)) {
                         app.set_mode(SurfaceMode::Notch);
+                    }
+                }
+                tray::CMD_THEME_VIOLET | tray::CMD_THEME_MINT | tray::CMD_THEME_CORAL => {
+                    if let Some(app) = app(HWND(NOTCH_HWND.load(Ordering::Relaxed) as *mut core::ffi::c_void)) {
+                        use crate::theme::accent::Theme;
+                        let theme = match id {
+                            tray::CMD_THEME_MINT => Theme::Mint,
+                            tray::CMD_THEME_CORAL => Theme::Coral,
+                            _ => Theme::Violet,
+                        };
+                        app.settings.theme = theme;
+                        app.settings.save();
+                        crate::theme::accent::set(theme);
+                        app.draw();
                     }
                 }
                 tray::CMD_MODE_NOTCH_X => {

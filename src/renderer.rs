@@ -395,10 +395,10 @@ impl Renderer {
                 self.draw_hub(p)?;
             }
 
-            let border = theme::rgb(theme::color::VIOLET_800, 0.30 * p.opacity);
+            let border = theme::rgb(theme::accent::c800(), 0.30 * p.opacity);
             let primary = theme::rgb(theme::color::TEXT_PRIMARY, 1.0);
             let secondary = theme::rgb(theme::color::TEXT_SECONDARY, 1.0);
-            let accent = theme::rgb(theme::color::ACCENT_PRIMARY, 1.0);
+            let accent = theme::rgb(theme::accent::c600(), 1.0);
             let track = theme::rgb(theme::color::BG_ELEVATED, 1.0);
 
             let rect = D2D_RECT_F {
@@ -1108,7 +1108,7 @@ impl Renderer {
                                 &check,
                             );
                         } else {
-                            let outline = solid(ctx, &theme::rgb(theme::color::VIOLET_800, 1.0))?;
+                            let outline = solid(ctx, &theme::rgb(theme::accent::c800(), 1.0))?;
                             outline.SetOpacity(0.9 * panel_alpha);
                             ctx.DrawRoundedRectangle(
                                 &D2D1_ROUNDED_RECT {
@@ -1693,7 +1693,7 @@ impl Renderer {
                         if *value <= 15.0 {
                             theme::rgb(theme::color::DANGER, 1.0)
                         } else {
-                            theme::rgb(theme::color::SUCCESS, 1.0)
+                            theme::rgb(theme::accent::battery(), 1.0)
                         }
                     } else if *value >= theme::metric::DANGER_THRESHOLD {
                         theme::rgb(theme::color::DANGER, 1.0)
@@ -1817,8 +1817,8 @@ impl Renderer {
             let ctx = &self.ctx;
             let primary = solid(ctx, &theme::rgb(theme::color::TEXT_PRIMARY, 1.0))?;
             let secondary = solid(ctx, &theme::rgb(theme::color::TEXT_SECONDARY, 1.0))?;
-            let accent = solid(ctx, &theme::rgb(theme::color::ACCENT_PRIMARY, 1.0))?;
-            let border_color = theme::rgb(theme::color::VIOLET_800, 0.32 * p.opacity);
+            let accent = solid(ctx, &theme::rgb(theme::accent::c600(), 1.0))?;
+            let border_color = theme::rgb(theme::accent::c800(), 0.32 * p.opacity);
 
             let shift = |offset: (f32, f32), slide: f32| windows_numerics::Matrix3x2 {
                 M11: 1.0,
@@ -1877,7 +1877,7 @@ impl Renderer {
                 draw_text(ctx, name, &self.fmt_pill_title, scaled_rect(tx + 34.0, 46.0, 80.0, 30.0, s), &primary);
                 let state_brush = solid(
                     ctx,
-                    &theme::rgb(if on { theme::color::VIOLET_400 } else { theme::color::TEXT_MUTED }, 1.0),
+                    &theme::rgb(if on { theme::accent::c400() } else { theme::color::TEXT_MUTED }, 1.0),
                 )?;
                 draw_text(ctx, state, &self.fmt_small, scaled_rect(tx + 108.0, 46.0, 64.0, 30.0, s), &state_brush);
             }
@@ -1924,10 +1924,10 @@ impl Renderer {
             );
 
             for (rect, glyph, label, active, glyph_color) in [
-                (hits.focus, "\u{E7E8}", "Focus Mode", p.focus_running, theme::color::VIOLET_400),
+                (hits.focus, "\u{E7E8}", "Focus Mode", p.focus_running, theme::accent::c400()),
                 (hits.battery, "\u{EBA6}", "Battery Saver", false, theme::color::SUCCESS),
                 (hits.record, "\u{E7C8}", "Screen Record", false, theme::color::DANGER),
-                (hits.theme, "\u{E790}", "Theme", false, theme::color::VIOLET_300),
+                (hits.theme, "\u{E790}", "Theme", false, theme::accent::c300()),
             ] {
                 let rr = D2D1_ROUNDED_RECT {
                     rect: scaled_rect(rect.x, rect.y, rect.w, rect.h, s),
@@ -1936,9 +1936,9 @@ impl Renderer {
                 };
                 draw_glass(ctx, rr.rect, 10.0 * s, 1.0, Glass::Tile, s)?;
                 if active {
-                    let fill = solid(ctx, &theme::rgb(theme::color::ACCENT_PRIMARY, 0.22))?;
+                    let fill = solid(ctx, &theme::rgb(theme::accent::c600(), 0.22))?;
                     ctx.FillRoundedRectangle(&rr, &fill);
-                    let rim = solid(ctx, &theme::rgb(theme::color::VIOLET_500, 0.55))?;
+                    let rim = solid(ctx, &theme::rgb(theme::accent::c500(), 0.55))?;
                     ctx.DrawRoundedRectangle(&rr, &rim, 1.0, None);
                 }
                 let icon = solid(ctx, &theme::rgb(glyph_color, 1.0))?;
@@ -2078,7 +2078,7 @@ impl Renderer {
             let primary = solid(ctx, &theme::rgb(theme::color::TEXT_PRIMARY, 1.0))?;
             let secondary = solid(ctx, &theme::rgb(theme::color::TEXT_SECONDARY, 1.0))?;
             let muted = solid(ctx, &theme::rgb(theme::color::TEXT_MUTED, 1.0))?;
-            let accent = solid(ctx, &theme::rgb(theme::color::VIOLET_500, 1.0))?;
+            let accent = solid(ctx, &theme::rgb(theme::accent::c500(), 1.0))?;
 
             // Launcher.
             let l = hub::launcher();
@@ -2174,13 +2174,13 @@ impl Renderer {
                 let cx = m.x + 340.0 + index as f32 * 46.0;
                 let cy = m.y + 66.0;
                 let color = if index == 2 {
-                    if *value <= 15.0 { theme::color::DANGER } else { theme::color::SUCCESS }
+                    if *value <= 15.0 { theme::color::DANGER } else { theme::accent::battery() }
                 } else if *value >= theme::metric::DANGER_THRESHOLD {
                     theme::color::DANGER
                 } else if *value >= theme::metric::WARNING_THRESHOLD {
                     theme::color::WARNING
                 } else {
-                    theme::color::VIOLET_600
+                    theme::accent::c600()
                 };
                 draw_ring(ctx, cx, cy, 17.0, 3.5, value / 100.0, &theme::rgb(color, 1.0), s, 1.0)?;
                 draw_text(ctx, text, &self.fmt_tab, scaled_rect(cx - 17.0, cy - 8.0, 34.0, 16.0, s), &primary);
@@ -2461,11 +2461,11 @@ unsafe fn violet_gradient(
     let stops = [
         D2D1_GRADIENT_STOP {
             position: 0.0,
-            color: theme::rgb(theme::color::VIOLET_500, alpha),
+            color: theme::rgb(theme::accent::c500(), alpha),
         },
         D2D1_GRADIENT_STOP {
             position: 1.0,
-            color: theme::rgb(theme::color::VIOLET_700, alpha),
+            color: theme::rgb(theme::accent::c700(), alpha),
         },
     ];
     let collection = ctx.CreateGradientStopCollection(
@@ -2504,7 +2504,17 @@ unsafe fn draw_logo(
     let glow = solid(ctx, &theme::rgb(theme::color::VIOLET_600, 0.22 * alpha))?;
     ctx.FillEllipse(&circle(cx * s, cy * s, (r + 3.0) * s), &glow);
     let rect = scaled_rect(cx - r, cy - r, r * 2.0, r * 2.0, s);
-    let fill = violet_gradient(ctx, &rect, alpha)?;
+    let fill = linear(
+        ctx,
+        rect.left,
+        rect.top,
+        rect.right,
+        rect.bottom,
+        &[
+            (0.0, theme::rgb(theme::color::VIOLET_500, alpha)),
+            (1.0, theme::rgb(theme::color::VIOLET_700, alpha)),
+        ],
+    )?;
     ctx.FillEllipse(&circle(cx * s, cy * s, r * s), &fill);
     let rim = solid(ctx, &theme::rgb(theme::color::VIOLET_300, 0.45 * alpha))?;
     ctx.DrawEllipse(&circle(cx * s, cy * s, r * s), &rim, 1.0, None);
@@ -2624,7 +2634,7 @@ unsafe fn draw_slider(
     if thumb {
         let cx = (x + w * ratio) * s;
         let cy = (y + h * 0.5) * s;
-        let glow = solid(ctx, &theme::rgb(theme::color::VIOLET_600, 0.30 * alpha))?;
+        let glow = solid(ctx, &theme::rgb(theme::accent::c600(), 0.30 * alpha))?;
         ctx.FillEllipse(&circle(cx, cy, 8.0 * s), &glow);
         let knob = solid(ctx, &theme::rgb(0xFFFFFF, alpha))?;
         ctx.FillEllipse(&circle(cx, cy, 5.5 * s), &knob);
@@ -2717,8 +2727,8 @@ unsafe fn draw_glass(
         )
     } else {
         (
-            theme::rgb(theme::color::VIOLET_900, g.body_top * opacity),
-            theme::rgb(theme::color::GRAPHITE_950, g.body_bottom * opacity),
+            theme::rgb(theme::accent::c900(), g.body_top * opacity),
+            theme::rgb(theme::accent::base(), g.body_bottom * opacity),
         )
     };
     let body = linear(ctx, rect.left, rect.top, rect.left, rect.bottom, &[(0.0, top), (1.0, bottom)])?;
@@ -2750,7 +2760,7 @@ unsafe fn draw_glass(
         rect.bottom,
         &[
             (0.0, theme::rgb(0xFFFFFF, rim_a * opacity)),
-            (0.5, theme::rgb(theme::color::VIOLET_500, rim_a * 0.55 * opacity)),
+            (0.5, theme::rgb(theme::accent::c500(), rim_a * 0.55 * opacity)),
             (1.0, theme::rgb(0xFFFFFF, rim_a * 0.2 * opacity)),
         ],
     )?;

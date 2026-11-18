@@ -142,3 +142,93 @@ pub mod metric {
     pub const DANGER_THRESHOLD: f32 = 95.0;
     pub const TRACK_HEIGHT: f32 = 3.0;
 }
+
+/// Runtime colour theme. Brand marks (the N logo) stay violet; everything
+/// that reads as "accent" (sliders, rings, glass tint, rims) follows this.
+pub mod accent {
+    use serde::{Deserialize, Serialize};
+    use std::sync::atomic::{AtomicU8, Ordering};
+
+    #[derive(Clone, Copy, PartialEq, Eq, Debug, Default, Serialize, Deserialize)]
+    #[serde(rename_all = "lowercase")]
+    pub enum Theme {
+        #[default]
+        Violet,
+        /// Fresh: mint-teal on blue slate.
+        Mint,
+        /// Warm: coral to peach on dark plum.
+        Coral,
+    }
+
+    struct Palette {
+        c300: u32,
+        c400: u32,
+        c500: u32,
+        c600: u32,
+        c700: u32,
+        c800: u32,
+        c900: u32,
+        base: u32,
+        battery: u32,
+    }
+
+    const VIOLET: Palette = Palette {
+        c300: 0xD4CEFF,
+        c400: 0xB9AEFF,
+        c500: 0xA194FF,
+        c600: 0x8B7CFF,
+        c700: 0x7464EB,
+        c800: 0x51458F,
+        c900: 0x292440,
+        base: 0x090A0D,
+        battery: super::color::SUCCESS,
+    };
+    const MINT: Palette = Palette {
+        c300: 0xCCFBF1,
+        c400: 0x99F6E4,
+        c500: 0x5EEAD4,
+        c600: 0x2DD4BF,
+        c700: 0x14B8A6,
+        c800: 0x1F6F6A,
+        c900: 0x123038,
+        base: 0x0B1418,
+        battery: super::color::INFO,
+    };
+    const CORAL: Palette = Palette {
+        c300: 0xFFE4D6,
+        c400: 0xFECDA6,
+        c500: 0xFDBA74,
+        c600: 0xFB7185,
+        c700: 0xE65A70,
+        c800: 0x8A3A52,
+        c900: 0x2E1A2C,
+        base: 0x120A12,
+        battery: super::color::SUCCESS,
+    };
+
+    static CURRENT: AtomicU8 = AtomicU8::new(0);
+
+    pub fn set(theme: Theme) {
+        CURRENT.store(theme as u8, Ordering::Relaxed);
+    }
+
+    fn p() -> &'static Palette {
+        match CURRENT.load(Ordering::Relaxed) {
+            1 => &MINT,
+            2 => &CORAL,
+            _ => &VIOLET,
+        }
+    }
+
+    pub fn c300() -> u32 { p().c300 }
+    pub fn c400() -> u32 { p().c400 }
+    pub fn c500() -> u32 { p().c500 }
+    pub fn c600() -> u32 { p().c600 }
+    pub fn c700() -> u32 { p().c700 }
+    pub fn c800() -> u32 { p().c800 }
+    pub fn c900() -> u32 { p().c900 }
+    /// Darkest glass stop.
+    pub fn base() -> u32 { p().base }
+    /// Battery ring colour (kept distinct from the accent).
+    pub fn battery() -> u32 { p().battery }
+}

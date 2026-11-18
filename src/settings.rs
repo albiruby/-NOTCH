@@ -20,6 +20,8 @@ pub struct Settings {
     /// Dynamic-island pill centre as a fraction of the monitor (x, y).
     /// `None` keeps the default top-centre spot.
     pub island_anchor: Option<[f32; 2]>,
+    /// Accent colour theme: `violet` (default), `mint`, or `coral`.
+    pub theme: crate::theme::accent::Theme,
 }
 
 impl Default for Settings {
@@ -35,6 +37,7 @@ impl Default for Settings {
             hide_on_fullscreen: true,
             show_clock: true,
             island_anchor: None,
+            theme: Default::default(),
         }
     }
 }
