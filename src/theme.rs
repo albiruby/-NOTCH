@@ -132,6 +132,9 @@ pub mod motion {
     pub const SLOW_MS: u16 = 300;
     /// Spring constant for surface morphing, tuned to land near motion.smooth.
     pub const SPRING_OMEGA: f32 = 30.0;
+    /// Island snap: a little stiffer travel with a small overshoot.
+    pub const SNAP_OMEGA: f32 = 24.0;
+    pub const SNAP_ZETA: f32 = 0.66;
 }
 
 pub mod metric {

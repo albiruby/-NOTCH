@@ -8,7 +8,7 @@ kompositor Windows, jadi aplikasi hanya menggambar ketika ada yang berubah.
 
 ## Status
 
-v1.6 — layout Hub jadi default (klik pill, semua widget muncul). Glassmorphism penuh: permukaan tembus pandang, kilau diagonal, tepi bercahaya, bayangan lembut. Visual mengikuti referensi brand. Yang sudah ada:
+v1.7 — dynamic island bisa di-drag bebas dan menempel ke tepi/tengah layar. Layout Hub jadi default (klik pill, semua widget muncul). Glassmorphism penuh: permukaan tembus pandang, kilau diagonal, tepi bercahaya, bayangan lembut. Visual mengikuti referensi brand. Yang sudah ada:
 
 **Empat layout**
 - `Hub` (default): klik pill, semua widget muncul sekaligus: Apps launcher, Clipboard, Media + CPU/RAM/baterai, Focus timer, Quick Controls, dan File Shelf. Pill berubah jadi top bar. Klik area kosong atau top bar untuk menutup.
@@ -19,6 +19,7 @@ v1.6 — layout Hub jadi default (klik pill, semua widget muncul). Glassmorphism
 
 **Bentuk dan perilaku**
 - Dua gaya: classic notch (menempel di tepi atas) dan dynamic island (pill mengambang)
+- Dynamic island bisa di-drag ke mana saja. Dilepas dekat tepi kiri/kanan, tengah, atas, atau bawah layar, pill menempel ke sana dengan animasi spring. Posisi tersimpan; tray → **Reset island position** mengembalikan ke atas tengah
 - Hover untuk expand, mouse keluar untuk collapse, animasi spring kritis
 - Klik di luar pill menembus ke aplikasi di bawahnya
 - Tidak mencuri keyboard focus saat idle
@@ -127,6 +128,7 @@ Untuk pengujian, `notch.exe --expanded` langsung membuka panel tanpa hover.
 
 | Aksi | Hasil |
 | --- | --- |
+| Drag pill (dynamic island) | Pindahkan; dilepas dekat tepi/tengah akan menempel |
 | Klik pill (Hub) | Buka semua widget sekaligus |
 | Klik area kosong / top bar (Hub) | Tutup Hub |
 | Hover pill (Panel/Wide) | Buka panel atau wide bar sesuai layout |
@@ -166,6 +168,7 @@ Dibuat otomatis di `%APPDATA%\Notch\`.
 | `expanded_width` / `expanded_height` | Ukuran panel |
 | `hide_on_fullscreen` | Sembunyikan saat fullscreen |
 | `show_clock` | Tampilkan jam di pill |
+| `island_anchor` | Posisi pusat island sebagai pecahan layar `[x, y]`, `null` = atas tengah |
 
 ## Privasi
 

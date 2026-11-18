@@ -29,6 +29,7 @@ pub const CMD_LAYOUT_PANEL: usize = 11;
 pub const CMD_LAYOUT_WIDE: usize = 12;
 pub const CMD_LAYOUT_CARDS: usize = 13;
 pub const CMD_LAYOUT_HUB: usize = 14;
+pub const CMD_RESET_POSITION: usize = 15;
 
 pub struct MenuState {
     pub notch: bool,
@@ -100,6 +101,7 @@ pub fn show_menu(owner: HWND, state: &MenuState) -> Result<()> {
         };
         AppendMenuW(menu, notch_flags, CMD_MODE_NOTCH, w!("Classic notch"))?;
         AppendMenuW(menu, island_flags, CMD_MODE_ISLAND, w!("Dynamic island"))?;
+        AppendMenuW(menu, MF_STRING, CMD_RESET_POSITION, w!("Reset island position"))?;
 
         let layout_menu = CreatePopupMenu()?;
         let panel_flags = if state.layout == crate::state::Layout::Panel {

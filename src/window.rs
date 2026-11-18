@@ -20,33 +20,6 @@ pub fn scale_for(hwnd: HWND) -> f32 {
     }
 }
 
-/// Places the surface at the top centre of the monitor that owns the window.
-pub fn place(hwnd: HWND, width_px: i32, height_px: i32) -> Result<()> {
-    unsafe {
-        let monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
-        let mut info = MONITORINFO {
-            cbSize: std::mem::size_of::<MONITORINFO>() as u32,
-            ..Default::default()
-        };
-        GetMonitorInfoW(monitor, &mut info).ok()?;
-
-        let work = info.rcMonitor;
-        let x = work.left + (work.right - work.left - width_px) / 2;
-        let y = work.top;
-
-        SetWindowPos(
-            hwnd,
-            Some(HWND_TOPMOST),
-            x,
-            y,
-            width_px,
-            height_px,
-            SWP_NOACTIVATE | SWP_SHOWWINDOW,
-        )?;
-    }
-    Ok(())
-}
-
 /// Places a surface at the bottom-right of the monitor work area.
 pub fn place_right(
     hwnd: HWND,
@@ -141,3 +114,40 @@ fn foreground_covers_monitor() -> bool {
     }
 }
 
+
+/// Monitor and work-area rectangles (physical pixels) for the window's monitor.
+pub fn monitor_rects(hwnd: HWND) -> (RECT, RECT) {
+    unsafe {
+        let monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+        let mut info = MONITORINFO {
+            cbSize: std::mem::size_of::<MONITORINFO>() as u32,
+            ..Default::default()
+        };
+        let _ = GetMonitorInfoW(monitor, &mut info);
+        (info.rcMonitor, info.rcWork)
+    }
+}
+
+/// Top-left of the window in screen pixels.
+pub fn origin(hwnd: HWND) -> (i32, i32) {
+    unsafe {
+        let mut rect = RECT::default();
+        let _ = GetWindowRect(hwnd, &mut rect);
+        (rect.left, rect.top)
+    }
+}
+
+/// Moves the window (topmost, no activation) to `x, y` with the given size.
+pub fn move_to(hwnd: HWND, x: i32, y: i32, width_px: i32, height_px: i32) {
+    unsafe {
+        let _ = SetWindowPos(
+            hwnd,
+            Some(HWND_TOPMOST),
+            x,
+            y,
+            width_px,
+            height_px,
+            SWP_NOACTIVATE | SWP_SHOWWINDOW,
+        );
+    }
+}

@@ -545,9 +545,14 @@ impl Spring {
 
     /// Returns true while the spring is still moving.
     pub fn step(&mut self, dt: f32) -> bool {
-        let omega = crate::theme::motion::SPRING_OMEGA;
+        self.step_with(dt, crate::theme::motion::SPRING_OMEGA, 1.0)
+    }
+
+    /// Spring step with explicit stiffness and damping ratio. A ratio below 1
+    /// overshoots slightly, which is what makes the island snap feel springy.
+    pub fn step_with(&mut self, dt: f32, omega: f32, zeta: f32) -> bool {
         let x = self.value - self.target;
-        let accel = -omega * omega * x - 2.0 * omega * self.velocity;
+        let accel = -omega * omega * x - 2.0 * zeta * omega * self.velocity;
         self.velocity += accel * dt;
         self.value += self.velocity * dt;
 

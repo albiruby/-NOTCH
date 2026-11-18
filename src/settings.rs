@@ -17,6 +17,9 @@ pub struct Settings {
     pub expanded_height: f32,
     pub hide_on_fullscreen: bool,
     pub show_clock: bool,
+    /// Dynamic-island pill centre as a fraction of the monitor (x, y).
+    /// `None` keeps the default top-centre spot.
+    pub island_anchor: Option<[f32; 2]>,
 }
 
 impl Default for Settings {
@@ -31,6 +34,7 @@ impl Default for Settings {
             expanded_height: 300.0,
             hide_on_fullscreen: true,
             show_clock: true,
+            island_anchor: None,
         }
     }
 }

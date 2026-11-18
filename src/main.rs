@@ -122,7 +122,23 @@ struct App {
     battery: Option<u32>,
     charging: bool,
     wide_grace: Option<Instant>,
+    press: Option<Press>,
+    move_anim: Option<MoveAnim>,
     _tray: Tray,
+}
+
+/// A left-button press on the island that may turn into a drag.
+struct Press {
+    cursor: POINT,
+    origin: (i32, i32),
+    dragging: bool,
+}
+
+/// Window travel toward a snap target, driven by a springy 0..1 progress.
+struct MoveAnim {
+    from: (f32, f32),
+    to: (f32, f32),
+    spring: Spring,
 }
 
 impl App {
@@ -211,6 +227,11 @@ impl App {
         }
         self.spring
             .set_target(if phase == Phase::Expanded { 1.0 } else { 0.0 });
+        if self.island_free() && self.layout == Layout::Hub {
+            // The hub opens wherever the island sits; slide it fully on-screen
+            // while open and back to the island's spot when it closes.
+            self.place_window(true);
+        }
         if !self.animating {
             self.animating = true;
             self.last_frame = Instant::now();
@@ -226,8 +247,22 @@ impl App {
         let dt = (now - self.last_frame).as_secs_f32().clamp(0.001, 0.033);
         self.last_frame = now;
 
-        let moving = self.spring.step(dt);
+        let mut moving = self.spring.step(dt);
         self.state.t = self.spring.value;
+        if let Some(anim) = &mut self.move_anim {
+            let still = anim
+                .spring
+                .step_with(dt, crate::theme::motion::SNAP_OMEGA, crate::theme::motion::SNAP_ZETA);
+            let k = anim.spring.value;
+            let x = anim.from.0 + (anim.to.0 - anim.from.0) * k;
+            let y = anim.from.1 + (anim.to.1 - anim.from.1) * k;
+            let (w, h) = self.surface_px();
+            window::move_to(self.hwnd, x.round() as i32, y.round() as i32, w, h);
+            if !still {
+                self.move_anim = None;
+            }
+            moving |= still;
+        }
         if self.trace {
             log(&format!("frame {:.2} t={:.4}", dt * 1000.0, self.spring.value));
         }
@@ -242,6 +277,139 @@ impl App {
                 self.apply_layout(self.settings.layout, false);
             }
         }
+    }
+
+    fn surface_px(&self) -> (i32, i32) {
+        (
+            (self.metrics.surface_w * self.scale).round() as i32,
+            (self.metrics.surface_h * self.scale).round() as i32,
+        )
+    }
+
+    /// The island can be dragged and snapped; the classic notch and the
+    /// Cards layout stay where they are.
+    fn island_free(&self) -> bool {
+        self.settings.mode == SurfaceMode::Island && self.layout != Layout::Cards
+    }
+
+    /// Pill centre offset from the window's top-left, in pixels.
+    fn pill_offset(&self) -> (f32, f32) {
+        (
+            self.metrics.surface_w * 0.5 * self.scale,
+            (self.metrics.top_gap + self.metrics.compact_h * 0.5) * self.scale,
+        )
+    }
+
+    /// Where the window should sit for the current anchor and phase.
+    fn target_origin(&self) -> (f32, f32) {
+        let (mon, work) = window::monitor_rects(self.hwnd);
+        let (w, _) = self.surface_px();
+        let s = self.scale;
+        let default = (
+            mon.left as f32 + ((mon.right - mon.left) as f32 - w as f32) * 0.5,
+            mon.top as f32,
+        );
+        let anchor = match self.settings.island_anchor {
+            Some(anchor) if self.island_free() => anchor,
+            _ => return default,
+        };
+        let mon_w = (mon.right - mon.left) as f32;
+        let mon_h = (mon.bottom - mon.top) as f32;
+        let (off_x, off_y) = self.pill_offset();
+        let x = mon.left as f32 + anchor[0] * mon_w - off_x;
+        let y = mon.top as f32 + anchor[1] * mon_h - off_y;
+
+        // Keep the part that matters on screen. Hover layouts always reserve
+        // room for the expanded shape so expanding never moves the window
+        // out from under the cursor; the click-driven hub only does so while
+        // open.
+        let m = &self.metrics;
+        let expanded = self.state.phase == Phase::Expanded || self.layout != Layout::Hub;
+        let (rw, rh) = if !expanded {
+            (m.compact_w, m.compact_h)
+        } else if self.layout == Layout::Hub {
+            (m.surface_w, m.surface_h - m.top_gap)
+        } else {
+            (m.expanded_w, m.expanded_h)
+        };
+        let left = (m.surface_w - rw) * 0.5 * s;
+        let top = m.top_gap * s;
+        let clamp = |v: f32, lo: f32, hi: f32| if hi < lo { lo } else { v.clamp(lo, hi) };
+        (
+            clamp(x, work.left as f32 - left, work.right as f32 - left - rw * s),
+            clamp(y, work.top as f32 - top, work.bottom as f32 - top - rh * s),
+        )
+    }
+
+    fn place_window(&mut self, animate: bool) {
+        let (w, h) = self.surface_px();
+        let to = self.target_origin();
+        if !animate {
+            self.move_anim = None;
+            window::move_to(self.hwnd, to.0.round() as i32, to.1.round() as i32, w, h);
+            return;
+        }
+        let (fx, fy) = window::origin(self.hwnd);
+        let from = (fx as f32, fy as f32);
+        if (from.0 - to.0).abs() < 1.0 && (from.1 - to.1).abs() < 1.0 {
+            return;
+        }
+        let mut spring = Spring::new(0.0);
+        spring.set_target(1.0);
+        self.move_anim = Some(MoveAnim { from, to, spring });
+        if !self.animating {
+            self.animating = true;
+            self.last_frame = Instant::now();
+            arm_anim_timer();
+        }
+    }
+
+    /// Drop the island: snap to the nearest edge or centre line when close,
+    /// otherwise stay where it was dropped. Saves the result.
+    fn finish_drag(&mut self) {
+        let (mon, work) = window::monitor_rects(self.hwnd);
+        let s = self.scale;
+        let (ox, oy) = window::origin(self.hwnd);
+        let (off_x, off_y) = self.pill_offset();
+        let mut cx = ox as f32 + off_x;
+        let mut cy = oy as f32 + off_y;
+
+        let half_w = self.metrics.compact_w * 0.5 * s;
+        let half_h = self.metrics.compact_h * 0.5 * s;
+        let margin = 12.0 * s;
+        let threshold = 96.0 * s;
+        let left = work.left as f32 + margin + half_w;
+        let right = work.right as f32 - margin - half_w;
+        let center_x = (mon.left + mon.right) as f32 * 0.5;
+        let top = mon.top as f32 + off_y;
+        let bottom = work.bottom as f32 - margin - half_h;
+        let center_y = (work.top + work.bottom) as f32 * 0.5;
+
+        cx = cx.clamp(left, right.max(left));
+        cy = cy.clamp(top, bottom.max(top));
+        if (cx - center_x).abs() < threshold {
+            cx = center_x;
+        } else if cx - left < threshold {
+            cx = left;
+        } else if right - cx < threshold {
+            cx = right;
+        }
+        if cy - top < threshold {
+            cy = top;
+        } else if bottom - cy < threshold {
+            cy = bottom;
+        } else if (cy - center_y).abs() < threshold * 0.5 {
+            cy = center_y;
+        }
+
+        let mon_w = (mon.right - mon.left) as f32;
+        let mon_h = (mon.bottom - mon.top) as f32;
+        self.settings.island_anchor = Some([
+            (cx - mon.left as f32) / mon_w,
+            (cy - mon.top as f32) / mon_h,
+        ]);
+        self.settings.save();
+        self.place_window(true);
     }
 
     /// Click handling for the Hub layout. Compact: the pill opens the hub.
@@ -449,6 +617,7 @@ impl App {
         self.settings.mode = mode;
         self.settings.save();
         self.metrics = Metrics::for_layout(&self.settings, self.layout);
+        self.place_window(true);
         self.draw();
     }
 
@@ -481,7 +650,7 @@ impl App {
             let margin = (16.0 * self.scale).round() as i32;
             let _ = window::place_right(self.hwnd, width, height, margin);
         } else {
-            let _ = window::place(self.hwnd, width, height);
+            self.place_window(false);
         }
         if from_wide {
             self.wide_grace = Some(Instant::now());
@@ -790,6 +959,8 @@ unsafe extern "system" fn notch_wndproc(
                 battery,
                 charging,
                 wide_grace: None,
+                press: None,
+                move_anim: None,
                 _tray: tray,
             });
             app.refresh_clock();
@@ -825,7 +996,8 @@ unsafe extern "system" fn notch_wndproc(
             let placed = if layout == Layout::Cards {
                 window::place_right(hwnd, width as i32, height as i32, (16.0 * scale) as i32)
             } else {
-                window::place(hwnd, width as i32, height as i32)
+                (*ptr).place_window(false);
+                Ok(())
             };
             log(&format!(
                 "created {}x{} scale={} place={:?} state={} hide={}",
@@ -856,6 +1028,26 @@ unsafe extern "system" fn notch_wndproc(
             if let Some(app) = app(hwnd) {
                 let x = x_lparam(lparam) / app.scale;
                 let y = y_lparam(lparam) / app.scale;
+
+                if app.dragging_volume || app.dragging_brightness {
+                    app.press = None;
+                }
+                if let Some(press) = &mut app.press {
+                    let mut cursor = POINT::default();
+                    let _ = GetCursorPos(&mut cursor);
+                    let dx = cursor.x - press.cursor.x;
+                    let dy = cursor.y - press.cursor.y;
+                    if !press.dragging && dx * dx + dy * dy > 36 {
+                        press.dragging = true;
+                    }
+                    if press.dragging {
+                        let (ox, oy) = press.origin;
+                        app.move_anim = None;
+                        let (w, h) = app.surface_px();
+                        window::move_to(hwnd, ox + dx, oy + dy, w, h);
+                        return LRESULT(0);
+                    }
+                }
 
                 if app.layout == Layout::Cards || (app.layout == Layout::Hub && (app.dragging_volume || app.dragging_brightness)) {
                     let x = if app.layout == Layout::Hub { x - state::hub::QUICK_OFFSET.0 } else { x };
@@ -995,6 +1187,17 @@ unsafe extern "system" fn notch_wndproc(
         WM_LBUTTONDOWN => {            if let Some(app) = app(hwnd) {
                 let x = x_lparam(lparam) / app.scale;
                 let y = y_lparam(lparam) / app.scale;
+                // Any press on the island itself may become a drag.
+                if app.island_free() && app.state.hit_shape(&app.metrics).contains(x, y) {
+                    let mut cursor = POINT::default();
+                    let _ = GetCursorPos(&mut cursor);
+                    app.press = Some(Press {
+                        cursor,
+                        origin: window::origin(hwnd),
+                        dragging: false,
+                    });
+                    let _ = SetCapture(hwnd);
+                }
                 if app.layout == Layout::Hub && app.state.phase == Phase::Expanded {
                     let (dx, dy) = state::hub::QUICK_OFFSET;
                     let (qx, qy) = (x - dx, y - dy);
@@ -1039,6 +1242,16 @@ unsafe extern "system" fn notch_wndproc(
             }
             LRESULT(0)
         }
+        WM_CAPTURECHANGED => {
+            if let Some(app) = app(hwnd) {
+                if let Some(press) = app.press.take() {
+                    if press.dragging {
+                        app.finish_drag();
+                    }
+                }
+            }
+            LRESULT(0)
+        }
         WM_MOUSELEAVE => {
             if let Some(app) = app(hwnd) {
                 app.tracking_leave = false;
@@ -1052,6 +1265,15 @@ unsafe extern "system" fn notch_wndproc(
             if let Some(app) = app(hwnd) {
                 let x = x_lparam(lparam) / app.scale;
                 let y = y_lparam(lparam) / app.scale;
+                if let Some(press) = app.press.take() {
+                    if !app.dragging_volume && !app.dragging_brightness {
+                        let _ = ReleaseCapture();
+                    }
+                    if press.dragging {
+                        app.finish_drag();
+                        return LRESULT(0);
+                    }
+                }
                 if app.layout == Layout::Hub {
                     app.hub_click(hwnd, x, y);
                     return LRESULT(0);
@@ -1447,7 +1669,7 @@ unsafe extern "system" fn notch_wndproc(
                     let margin = (16.0 * app.scale).round() as i32;
                     let _ = window::place_right(hwnd, width, height, margin);
                 } else {
-                    let _ = window::place(hwnd, width, height);
+                    app.place_window(false);
                 }
                 app.draw();
             }
@@ -1559,6 +1781,13 @@ unsafe extern "system" fn menu_wndproc(
                 tray::CMD_LAYOUT_WIDE => {
                     if let Some(app) = app(HWND(NOTCH_HWND.load(Ordering::Relaxed) as *mut core::ffi::c_void)) {
                         app.apply_layout(Layout::Wide, true);
+                    }
+                }
+                tray::CMD_RESET_POSITION => {
+                    if let Some(app) = app(HWND(NOTCH_HWND.load(Ordering::Relaxed) as *mut core::ffi::c_void)) {
+                        app.settings.island_anchor = None;
+                        app.settings.save();
+                        app.place_window(true);
                     }
                 }
                 tray::CMD_LAYOUT_HUB => {
