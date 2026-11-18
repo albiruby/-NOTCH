@@ -82,3 +82,101 @@ fn scan(dir: &Path, depth: u32, out: &mut Vec<AppEntry>) {
         });
     }
 }
+
+/// Loads a shortcut's icon as premultiplied BGRA pixels (top-down).
+/// Returns (side, pixels) where the image is `side` x `side`. None if the
+/// icon can't be read. Used by the renderer to build a D2D bitmap once.
+pub fn icon_bgra(path: &str) -> Option<(u32, Vec<u8>)> {
+    use windows::core::PCWSTR;
+    use windows::Win32::Graphics::Gdi::{
+        DeleteObject, GetDC, GetDIBits, GetObjectW, ReleaseDC, BITMAP, BITMAPINFO,
+        BITMAPINFOHEADER, BI_RGB, DIB_RGB_COLORS, HBITMAP,
+    };
+    use windows::Win32::UI::Shell::{SHGetFileInfoW, SHFILEINFOW, SHGFI_ICON, SHGFI_LARGEICON};
+    use windows::Win32::UI::WindowsAndMessaging::{DestroyIcon, GetIconInfo, HICON, ICONINFO};
+
+    let wide: Vec<u16> = path.encode_utf16().chain(std::iter::once(0)).collect();
+    unsafe {
+        let mut info = SHFILEINFOW::default();
+        let ok = SHGetFileInfoW(
+            PCWSTR(wide.as_ptr()),
+            Default::default(),
+            Some(&mut info),
+            std::mem::size_of::<SHFILEINFOW>() as u32,
+            SHGFI_ICON | SHGFI_LARGEICON,
+        );
+        if ok == 0 || info.hIcon.is_invalid() {
+            return None;
+        }
+        let icon: HICON = info.hIcon;
+        let result = icon_to_bgra(icon);
+        let _ = DestroyIcon(icon);
+        return result;
+    }
+
+    /// Inner: HICON -> pixels via its colour bitmap.
+    unsafe fn icon_to_bgra(icon: HICON) -> Option<(u32, Vec<u8>)> {
+        let mut ii = ICONINFO::default();
+        GetIconInfo(icon, &mut ii).ok()?;
+        let color: HBITMAP = ii.hbmColor;
+        if !ii.hbmMask.is_invalid() {
+            let _ = DeleteObject(ii.hbmMask.into());
+        }
+        if color.is_invalid() {
+            return None;
+        }
+        let mut bmp = BITMAP::default();
+        let got = GetObjectW(
+            color.into(),
+            std::mem::size_of::<BITMAP>() as i32,
+            Some(&mut bmp as *mut BITMAP as *mut core::ffi::c_void),
+        );
+        if got == 0 || bmp.bmWidth <= 0 || bmp.bmHeight <= 0 {
+            let _ = DeleteObject(color.into());
+            return None;
+        }
+        let w = bmp.bmWidth as u32;
+        let h = bmp.bmHeight as u32;
+        let mut header = BITMAPINFO {
+            bmiHeader: BITMAPINFOHEADER {
+                biSize: std::mem::size_of::<BITMAPINFOHEADER>() as u32,
+                biWidth: bmp.bmWidth,
+                // Negative height: top-down rows.
+                biHeight: -bmp.bmHeight,
+                biPlanes: 1,
+                biBitCount: 32,
+                biCompression: BI_RGB.0,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let mut pixels = vec![0u8; (w * h * 4) as usize];
+        let dc = GetDC(None);
+        let scans = GetDIBits(
+            dc,
+            color,
+            0,
+            h,
+            Some(pixels.as_mut_ptr() as *mut core::ffi::c_void),
+            &mut header,
+            DIB_RGB_COLORS,
+        );
+        ReleaseDC(None, dc);
+        let _ = DeleteObject(color.into());
+        if scans == 0 {
+            return None;
+        }
+        // GetDIBits gives straight-alpha BGRA; D2D premultiplied needs b,g,r
+        // scaled by a. Some icons report zero alpha everywhere (no alpha
+        // channel) — treat those as fully opaque.
+        let has_alpha = pixels.chunks_exact(4).any(|p| p[3] != 0);
+        for px in pixels.chunks_exact_mut(4) {
+            let a = if has_alpha { px[3] as u32 } else { 255 };
+            px[0] = (px[0] as u32 * a / 255) as u8;
+            px[1] = (px[1] as u32 * a / 255) as u8;
+            px[2] = (px[2] as u32 * a / 255) as u8;
+            px[3] = a as u8;
+        }
+        (w == h).then_some((w, pixels))
+    }
+}

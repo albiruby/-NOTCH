@@ -213,6 +213,12 @@ impl App {
                 .take(8)
                 .map(|app| app.name.clone())
                 .collect(),
+            app_paths: self
+                .apps
+                .iter()
+                .take(8)
+                .map(|app| app.path.clone())
+                .collect(),
             water: self.tasks.water,
             water_goal: self.tasks.water_goal,
             clip_items: self.clip_items.clone(),

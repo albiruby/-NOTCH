@@ -87,6 +87,7 @@ v1.13 — AI Developer Cockpit di Hub. v1.12: indikator privasi kamera/mikrofon 
 - Water tracker 8 gelas per hari, reset otomatis saat tanggal berganti, pengingat 45 menit
 - File shelf: drag file ke notch, klik untuk membuka; path disimpan, file tidak disalin
 - Clipboard history 8 item terakhir, klik untuk menyalin ulang; hanya di memori, tidak ditulis ke disk
+- Ikon aplikasi asli di launcher dan dock (diekstrak dari shortcut Windows), fallback ke huruf awal kalau ikon tak terbaca
 - Apps launcher: shortcut pinned taskbar (fallback Start Menu), klik untuk membuka aplikasi asli
 
 **Halaman panel**

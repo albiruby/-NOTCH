@@ -2,13 +2,15 @@
 
 use windows::core::{Interface, Result};
 use windows::Win32::Foundation::HWND;
+use windows::Win32::Graphics::Direct2D::Common::D2D_SIZE_U;
 use windows::Win32::Graphics::Direct2D::Common::{D2D1_COLOR_F, D2D1_GRADIENT_STOP, D2D_RECT_F};
 use windows::Win32::Graphics::Direct2D::{
     ID2D1Bitmap, ID2D1Bitmap1, ID2D1Brush, ID2D1Device, ID2D1DeviceContext,
     ID2D1LinearGradientBrush, ID2D1SolidColorBrush, D2D1_ANTIALIAS_MODE_PER_PRIMITIVE,
-    D2D1_BUFFER_PRECISION_8BPC_UNORM, D2D1_COLOR_INTERPOLATION_MODE_STRAIGHT,
-    D2D1_COLOR_SPACE_SRGB, D2D1_DEVICE_CONTEXT_OPTIONS_NONE, D2D1_DRAW_TEXT_OPTIONS_CLIP,
-    D2D1_ELLIPSE, D2D1_EXTEND_MODE_CLAMP, D2D1_INTERPOLATION_MODE_LINEAR, D2D1_LAYER_OPTIONS1_NONE,
+    D2D1_BITMAP_OPTIONS_NONE, D2D1_BITMAP_PROPERTIES1, D2D1_BUFFER_PRECISION_8BPC_UNORM,
+    D2D1_COLOR_INTERPOLATION_MODE_STRAIGHT, D2D1_COLOR_SPACE_SRGB,
+    D2D1_DEVICE_CONTEXT_OPTIONS_NONE, D2D1_DRAW_TEXT_OPTIONS_CLIP, D2D1_ELLIPSE,
+    D2D1_EXTEND_MODE_CLAMP, D2D1_INTERPOLATION_MODE_LINEAR, D2D1_LAYER_OPTIONS1_NONE,
     D2D1_LAYER_PARAMETERS1, D2D1_LINEAR_GRADIENT_BRUSH_PROPERTIES, D2D1_ROUNDED_RECT,
 };
 use windows::Win32::Graphics::Direct3D::D3D_DRIVER_TYPE_HARDWARE;
@@ -26,6 +28,7 @@ use windows::Win32::Graphics::DirectWrite::{
     DWRITE_PARAGRAPH_ALIGNMENT_NEAR, DWRITE_TEXT_ALIGNMENT_CENTER, DWRITE_TEXT_ALIGNMENT_LEADING,
     DWRITE_TEXT_ALIGNMENT_TRAILING,
 };
+use windows::Win32::Graphics::Dxgi::Common::DXGI_FORMAT_B8G8R8A8_UNORM as ICON_FMT;
 use windows::Win32::Graphics::Dxgi::Common::{
     DXGI_ALPHA_MODE_PREMULTIPLIED, DXGI_FORMAT_B8G8R8A8_UNORM, DXGI_SAMPLE_DESC,
 };
@@ -70,6 +73,7 @@ pub struct DrawParams {
     pub tasks: Vec<crate::tasks::Task>,
     pub shelf_paths: Vec<String>,
     pub apps: Vec<String>,
+    pub app_paths: Vec<String>,
     pub water: u32,
     pub water_goal: u32,
     pub clip_items: Vec<String>,
@@ -122,6 +126,7 @@ pub struct Renderer {
     fmt_card_title_center: IDWriteTextFormat,
     art_id: u64,
     art_bitmap: Option<ID2D1Bitmap1>,
+    icon_cache: std::cell::RefCell<std::collections::HashMap<String, Option<ID2D1Bitmap1>>>,
 }
 
 impl Renderer {
@@ -371,6 +376,7 @@ impl Renderer {
                 )?,
                 art_id: 0,
                 art_bitmap: None,
+                icon_cache: std::cell::RefCell::new(std::collections::HashMap::new()),
             })
         }
     }
@@ -2013,6 +2019,59 @@ impl Renderer {
 
     /// `hub`: Some(slide) when drawn inside the Hub overlay. The caller owns
     /// the card backgrounds and the fade layer; this shifts content into place.
+    /// Cached app icon as a D2D bitmap, built once per shortcut path.
+    fn icon(&self, path: &str) -> Option<ID2D1Bitmap1> {
+        if let Some(cached) = self.icon_cache.borrow().get(path) {
+            return cached.clone();
+        }
+        let built = crate::apps::icon_bgra(path).and_then(|(side, pixels)| unsafe {
+            let props = D2D1_BITMAP_PROPERTIES1 {
+                pixelFormat: windows::Win32::Graphics::Direct2D::Common::D2D1_PIXEL_FORMAT {
+                    format: ICON_FMT,
+                    alphaMode:
+                        windows::Win32::Graphics::Direct2D::Common::D2D1_ALPHA_MODE_PREMULTIPLIED,
+                },
+                dpiX: 96.0,
+                dpiY: 96.0,
+                bitmapOptions: D2D1_BITMAP_OPTIONS_NONE,
+                colorContext: std::mem::ManuallyDrop::new(None),
+            };
+            self.ctx
+                .CreateBitmap(
+                    D2D_SIZE_U {
+                        width: side,
+                        height: side,
+                    },
+                    Some(pixels.as_ptr() as *const core::ffi::c_void),
+                    side * 4,
+                    &props,
+                )
+                .ok()
+        });
+        self.icon_cache
+            .borrow_mut()
+            .insert(path.to_string(), built.clone());
+        built
+    }
+
+    /// Draw an app icon in `rect` if available; returns true if it drew one.
+    unsafe fn draw_app_icon(&self, path: Option<&str>, rect: D2D_RECT_F, alpha: f32) -> bool {
+        if let Some(path) = path {
+            if let Some(bitmap) = self.icon(path) {
+                self.ctx.DrawBitmap(
+                    &bitmap,
+                    Some(&rect),
+                    alpha,
+                    D2D1_INTERPOLATION_MODE_LINEAR,
+                    None,
+                    None,
+                );
+                return true;
+            }
+        }
+        false
+    }
+
     fn draw_cards(&self, p: &DrawParams, hub: Option<f32>) -> Result<()> {
         let s = p.scale;
         let hits = crate::state::card_hits();
@@ -2700,21 +2759,11 @@ impl Renderer {
                     .next()
                     .map(|c| c.to_uppercase().collect())
                     .unwrap_or_default();
-                draw_glass(
-                    ctx,
-                    scaled_rect(row.x, row.y + 6.0, 40.0, 40.0, s),
-                    10.0 * s,
-                    1.0,
-                    Glass::Tile,
-                    s,
-                )?;
-                draw_text(
-                    ctx,
-                    &initial,
-                    &self.fmt_card_title_center,
-                    scaled_rect(row.x, row.y + 6.0, 40.0, 40.0, s),
-                    &accent,
-                );
+                let tile = scaled_rect(row.x, row.y + 6.0, 40.0, 40.0, s);
+                if !self.draw_app_icon(p.app_paths.get(index).map(String::as_str), tile, 1.0) {
+                    draw_glass(ctx, tile, 10.0 * s, 1.0, Glass::Tile, s)?;
+                    draw_text(ctx, &initial, &self.fmt_card_title_center, tile, &accent);
+                }
                 draw_text(
                     ctx,
                     name,
@@ -3103,21 +3152,11 @@ impl Renderer {
                         .next()
                         .map(|c| c.to_uppercase().collect())
                         .unwrap_or_default();
-                    draw_glass(
-                        ctx,
-                        scaled_rect(item.x, item.y, item.w, item.h, s),
-                        14.0 * s,
-                        1.0,
-                        Glass::Tile,
-                        s,
-                    )?;
-                    draw_text(
-                        ctx,
-                        &initial,
-                        &self.fmt_card_title_center,
-                        scaled_rect(item.x, item.y, item.w, item.h, s),
-                        &accent,
-                    );
+                    let tile = scaled_rect(item.x, item.y, item.w, item.h, s);
+                    if !self.draw_app_icon(p.app_paths.get(index).map(String::as_str), tile, 1.0) {
+                        draw_glass(ctx, tile, 14.0 * s, 1.0, Glass::Tile, s)?;
+                        draw_text(ctx, &initial, &self.fmt_card_title_center, tile, &accent);
+                    }
                 }
             }
 
