@@ -5,7 +5,7 @@ use windows::Win32::Foundation::HWND;
 use windows::Win32::Graphics::Direct2D::Common::{D2D1_COLOR_F, D2D1_GRADIENT_STOP, D2D_RECT_F};
 use windows::Win32::Graphics::Direct2D::{
     ID2D1Bitmap1, ID2D1Brush, ID2D1Device, ID2D1DeviceContext, ID2D1LinearGradientBrush,
-    ID2D1SolidColorBrush, D2D1_ANTIALIAS_MODE_PER_PRIMITIVE, D2D1_INTERPOLATION_MODE_LINEAR,
+    ID2D1SolidColorBrush, ID2D1Bitmap, D2D1_ELLIPSE, D2D1_ANTIALIAS_MODE_PER_PRIMITIVE, D2D1_INTERPOLATION_MODE_LINEAR,
     D2D1_BUFFER_PRECISION_8BPC_UNORM,
     D2D1_COLOR_INTERPOLATION_MODE_STRAIGHT, D2D1_COLOR_SPACE_SRGB,
     D2D1_DEVICE_CONTEXT_OPTIONS_NONE, D2D1_DRAW_TEXT_OPTIONS_CLIP, D2D1_EXTEND_MODE_CLAMP,
@@ -20,7 +20,7 @@ use windows::Win32::Graphics::DirectComposition::{
 };
 use windows::Win32::Graphics::DirectWrite::{
     DWriteCreateFactory, IDWriteFactory, IDWriteTextFormat, DWRITE_FACTORY_TYPE_SHARED,
-    DWRITE_FONT_STRETCH_NORMAL, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_WEIGHT_MEDIUM,
+    DWRITE_FONT_STRETCH_NORMAL, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_WEIGHT_BOLD, DWRITE_FONT_WEIGHT_MEDIUM,
     DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_WEIGHT_SEMI_BOLD, DWRITE_MEASURING_MODE_NATURAL, DWRITE_PARAGRAPH_ALIGNMENT_CENTER,
     DWRITE_PARAGRAPH_ALIGNMENT_NEAR, DWRITE_TEXT_ALIGNMENT_CENTER, DWRITE_TEXT_ALIGNMENT_LEADING,
     DWRITE_TEXT_ALIGNMENT_TRAILING,
@@ -97,16 +97,20 @@ pub struct Renderer {
     fmt_media_artist: IDWriteTextFormat,
     fmt_time_left: IDWriteTextFormat,
     fmt_time_right: IDWriteTextFormat,
-    fmt_glyph: IDWriteTextFormat,
     fmt_status: IDWriteTextFormat,
     fmt_tab: IDWriteTextFormat,
     fmt_focus: IDWriteTextFormat,
     fmt_body: IDWriteTextFormat,
     fmt_small: IDWriteTextFormat,
-    fmt_wide_value: IDWriteTextFormat,
     fmt_wide_time: IDWriteTextFormat,
     fmt_wide_title: IDWriteTextFormat,
     fmt_wide_sub: IDWriteTextFormat,
+    fmt_icon: IDWriteTextFormat,
+    fmt_icon_sm: IDWriteTextFormat,
+    fmt_logo: IDWriteTextFormat,
+    fmt_pill_time: IDWriteTextFormat,
+    fmt_pill_title: IDWriteTextFormat,
+    fmt_card_title: IDWriteTextFormat,
     art_id: u64,
     art_bitmap: Option<ID2D1Bitmap1>,
 }
@@ -232,14 +236,6 @@ impl Renderer {
                     DWRITE_TEXT_ALIGNMENT_TRAILING,
                     DWRITE_PARAGRAPH_ALIGNMENT_NEAR,
                 )?,
-                fmt_glyph: format(
-                    &dwrite,
-                    "Segoe UI Symbol",
-                    15.0,
-                    DWRITE_FONT_WEIGHT_NORMAL,
-                    DWRITE_TEXT_ALIGNMENT_CENTER,
-                    DWRITE_PARAGRAPH_ALIGNMENT_CENTER,
-                )?,
                 fmt_status: format(
                     &dwrite,
                     theme::typography::FONT_UI,
@@ -280,14 +276,6 @@ impl Renderer {
                     DWRITE_TEXT_ALIGNMENT_LEADING,
                     DWRITE_PARAGRAPH_ALIGNMENT_CENTER,
                 )?,
-                fmt_wide_value: format(
-                    &dwrite,
-                    theme::typography::FONT_MONO,
-                    20.0,
-                    DWRITE_FONT_WEIGHT_SEMI_BOLD,
-                    DWRITE_TEXT_ALIGNMENT_LEADING,
-                    DWRITE_PARAGRAPH_ALIGNMENT_CENTER,
-                )?,
                 fmt_wide_time: format(
                     &dwrite,
                     theme::typography::FONT_UI,
@@ -311,6 +299,54 @@ impl Renderer {
                     DWRITE_FONT_WEIGHT_NORMAL,
                     DWRITE_TEXT_ALIGNMENT_LEADING,
                     DWRITE_PARAGRAPH_ALIGNMENT_NEAR,
+                )?,
+                fmt_icon: format(
+                    &dwrite,
+                    "Segoe MDL2 Assets",
+                    15.0,
+                    DWRITE_FONT_WEIGHT_NORMAL,
+                    DWRITE_TEXT_ALIGNMENT_CENTER,
+                    DWRITE_PARAGRAPH_ALIGNMENT_CENTER,
+                )?,
+                fmt_icon_sm: format(
+                    &dwrite,
+                    "Segoe MDL2 Assets",
+                    12.0,
+                    DWRITE_FONT_WEIGHT_NORMAL,
+                    DWRITE_TEXT_ALIGNMENT_CENTER,
+                    DWRITE_PARAGRAPH_ALIGNMENT_CENTER,
+                )?,
+                fmt_logo: format(
+                    &dwrite,
+                    theme::typography::FONT_UI,
+                    13.0,
+                    DWRITE_FONT_WEIGHT_BOLD,
+                    DWRITE_TEXT_ALIGNMENT_CENTER,
+                    DWRITE_PARAGRAPH_ALIGNMENT_CENTER,
+                )?,
+                fmt_pill_time: format(
+                    &dwrite,
+                    theme::typography::FONT_UI,
+                    theme::typography::LABEL,
+                    DWRITE_FONT_WEIGHT_SEMI_BOLD,
+                    DWRITE_TEXT_ALIGNMENT_TRAILING,
+                    DWRITE_PARAGRAPH_ALIGNMENT_CENTER,
+                )?,
+                fmt_pill_title: format(
+                    &dwrite,
+                    theme::typography::FONT_UI,
+                    theme::typography::CAPTION,
+                    DWRITE_FONT_WEIGHT_SEMI_BOLD,
+                    DWRITE_TEXT_ALIGNMENT_LEADING,
+                    DWRITE_PARAGRAPH_ALIGNMENT_CENTER,
+                )?,
+                fmt_card_title: format(
+                    &dwrite,
+                    theme::typography::FONT_UI,
+                    14.0,
+                    DWRITE_FONT_WEIGHT_SEMI_BOLD,
+                    DWRITE_TEXT_ALIGNMENT_LEADING,
+                    DWRITE_PARAGRAPH_ALIGNMENT_CENTER,
                 )?,
                 art_id: 0,
                 art_bitmap: None,
@@ -514,38 +550,58 @@ impl Renderer {
                         }
                     }
                 } else if p.show_clock {
-                    let dot = solid(ctx, &accent)?;
-                    dot.SetOpacity(compact_alpha);
-                    let center_y = (visible_top + shape.bottom()) * 0.5 * s;
-                    let dot_r = 2.6 * s;
-                    ctx.FillRoundedRectangle(
-                        &D2D1_ROUNDED_RECT {
-                            rect: D2D_RECT_F {
-                                left: (shape.x + 15.0) * s - dot_r,
-                                top: center_y - dot_r,
-                                right: (shape.x + 15.0) * s + dot_r,
-                                bottom: center_y + dot_r,
-                            },
-                            radiusX: dot_r,
-                            radiusY: dot_r,
-                        },
-                        &dot,
-                    );
+                    // Brand mark left, now-playing in the middle, clock right,
+                    // mirroring the reference top pill.
+                    let center_y = (visible_top + shape.bottom()) * 0.5;
+                    let mark_r = ((shape.bottom() - visible_top) * 0.5 - 6.0).clamp(7.0, 11.0);
+                    let mark_cx = shape.x + 10.0 + mark_r;
+                    draw_logo(ctx, &self.fmt_logo, mark_cx, center_y, mark_r, s, compact_alpha)?;
 
-                    let text_brush = solid(ctx, &primary)?;
-                    text_brush.SetOpacity(compact_alpha);
+                    let time_w = 54.0;
+                    let time_brush = solid(ctx, &primary)?;
+                    time_brush.SetOpacity(compact_alpha);
                     draw_text(
                         ctx,
                         &p.time,
-                        &self.fmt_clock,
+                        &self.fmt_pill_time,
                         D2D_RECT_F {
-                            left: (shape.x + 26.0) * s,
-                            top: (visible_top + 4.0) * s,
+                            left: (shape.right() - 14.0 - time_w) * s,
+                            top: visible_top * s,
                             right: (shape.right() - 14.0) * s,
-                            bottom: (shape.bottom() - 2.0) * s,
+                            bottom: shape.bottom() * s,
                         },
-                        &text_brush,
+                        &time_brush,
                     );
+
+                    let mut mid_left = mark_cx + mark_r + 8.0;
+                    let mid_right = shape.right() - 14.0 - time_w - 6.0;
+                    if p.media.available && mid_right - mid_left > 40.0 {
+                        let art_size = (mark_r * 2.0).min(20.0);
+                        if let Some(art) = &self.art_bitmap {
+                            draw_rounded_art(
+                                ctx,
+                                art,
+                                scaled_rect(mid_left, center_y - art_size * 0.5, art_size, art_size, s),
+                                5.0 * s,
+                                compact_alpha,
+                            )?;
+                            mid_left += art_size + 6.0;
+                        }
+                        let title = solid(ctx, &primary)?;
+                        title.SetOpacity(compact_alpha);
+                        draw_text(
+                            ctx,
+                            &p.media.title,
+                            &self.fmt_pill_title,
+                            D2D_RECT_F {
+                                left: mid_left * s,
+                                top: visible_top * s,
+                                right: mid_right * s,
+                                bottom: shape.bottom() * s,
+                            },
+                            &title,
+                        );
+                    }
                 }
             }
 
@@ -689,31 +745,13 @@ impl Renderer {
                     0.0
                 };
 
-                let track_brush = solid(ctx, &track)?;
-                track_brush.SetOpacity(panel_alpha);
-                ctx.FillRoundedRectangle(
-                    &D2D1_ROUNDED_RECT {
-                        rect: scaled_rect_raw(bar_left, y + 92.0, bar_w, 3.0, s),
-                        radiusX: 1.5 * s,
-                        radiusY: 1.5 * s,
-                    },
-                    &track_brush,
-                );
+                if p.media.available {
+                    draw_slider(ctx, bar_left, y + 91.5, bar_w, ratio, true, s, panel_alpha)?;
+                } else {
+                    draw_slider(ctx, bar_left, y + 91.5, bar_w, 0.0, false, s, panel_alpha)?;
+                }
 
                 if p.media.available {
-                    if ratio > 0.001 {
-                        let fill_brush = solid(ctx, &accent)?;
-                        fill_brush.SetOpacity(panel_alpha);
-                        ctx.FillRoundedRectangle(
-                            &D2D1_ROUNDED_RECT {
-                                rect: scaled_rect_raw(bar_left, y + 92.0, bar_w * ratio, 3.0, s),
-                                radiusX: 1.5 * s,
-                                radiusY: 1.5 * s,
-                            },
-                            &fill_brush,
-                        );
-                    }
-
                     let time_brush = solid(ctx, &secondary)?;
                     time_brush.SetOpacity(0.8 * panel_alpha);
                     draw_text(
@@ -736,8 +774,8 @@ impl Renderer {
                     glyph_brush.SetOpacity(0.85 * panel_alpha);
                     draw_text(
                         ctx,
-                        "\u{23EE}",
-                        &self.fmt_glyph,
+                        "\u{E892}",
+                        &self.fmt_icon,
                         scaled_rect(
                             transport.prev.x,
                             transport.prev.y,
@@ -748,12 +786,25 @@ impl Renderer {
                         &glyph_brush,
                     );
 
-                    let play_brush = solid(ctx, &primary)?;
+                    let play_disc = violet_gradient(
+                        ctx,
+                        &scaled_rect(transport.play.x, transport.play.y, transport.play.w, transport.play.h, s),
+                        panel_alpha,
+                    )?;
+                    ctx.FillEllipse(
+                        &circle(
+                            (transport.play.x + transport.play.w * 0.5) * s,
+                            (transport.play.y + transport.play.h * 0.5) * s,
+                            transport.play.w * 0.5 * s,
+                        ),
+                        &play_disc,
+                    );
+                    let play_brush = solid(ctx, &theme::rgb(0xFFFFFF, 1.0))?;
                     play_brush.SetOpacity(panel_alpha);
                     draw_text(
                         ctx,
-                        if p.media.playing { "\u{23F8}" } else { "\u{25B6}" },
-                        &self.fmt_glyph,
+                        if p.media.playing { "\u{E769}" } else { "\u{E768}" },
+                        &self.fmt_icon,
                         scaled_rect(
                             transport.play.x,
                             transport.play.y,
@@ -766,8 +817,8 @@ impl Renderer {
 
                     draw_text(
                         ctx,
-                        "\u{23ED}",
-                        &self.fmt_glyph,
+                        "\u{E893}",
+                        &self.fmt_icon,
                         scaled_rect(
                             transport.next.x,
                             transport.next.y,
@@ -1537,34 +1588,25 @@ impl Renderer {
                 );
 
                 if let Some(art) = &self.art_bitmap {
-                    ctx.DrawBitmap(
+                    draw_rounded_art(
+                        ctx,
                         art,
-                        Some(&scaled_rect(x + 22.0, y + 24.0, 48.0, 48.0, s)),
+                        scaled_rect(x + 22.0, y + 24.0, 48.0, 48.0, s),
+                        12.0 * s,
                         panel_alpha,
-                        D2D1_INTERPOLATION_MODE_LINEAR,
-                        None,
-                        None,
-                    );
+                    )?;
                 } else {
                     let tile = solid(ctx, &theme::rgb(theme::color::GRAPHITE_750, 0.9))?;
                     tile.SetOpacity(panel_alpha);
                     ctx.FillRoundedRectangle(
                         &D2D1_ROUNDED_RECT {
                             rect: scaled_rect(x + 22.0, y + 24.0, 48.0, 48.0, s),
-                            radiusX: 10.0 * s,
-                            radiusY: 10.0 * s,
+                            radiusX: 12.0 * s,
+                            radiusY: 12.0 * s,
                         },
                         &tile,
                     );
-                    let mark = solid(ctx, &accent)?;
-                    mark.SetOpacity(panel_alpha);
-                    draw_text(
-                        ctx,
-                        "N",
-                        &self.fmt_glyph,
-                        scaled_rect(x + 22.0, y + 24.0, 48.0, 48.0, s),
-                        &mark,
-                    );
+                    draw_logo(ctx, &self.fmt_logo, x + 46.0, y + 48.0, 13.0, s, panel_alpha)?;
                 }
 
                 if p.media.available {
@@ -1605,28 +1647,7 @@ impl Renderer {
                 } else {
                     0.0
                 };
-                let track_brush = solid(ctx, &track)?;
-                track_brush.SetOpacity(0.9 * panel_alpha);
-                ctx.FillRoundedRectangle(
-                    &D2D1_ROUNDED_RECT {
-                        rect: scaled_rect_raw(media_left, y + 74.0, bar_w, 3.0, s),
-                        radiusX: 1.5 * s,
-                        radiusY: 1.5 * s,
-                    },
-                    &track_brush,
-                );
-                if ratio > 0.001 {
-                    let fill_brush = solid(ctx, &accent)?;
-                    fill_brush.SetOpacity(panel_alpha);
-                    ctx.FillRoundedRectangle(
-                        &D2D1_ROUNDED_RECT {
-                            rect: scaled_rect_raw(media_left, y + 74.0, bar_w * ratio, 3.0, s),
-                            radiusX: 1.5 * s,
-                            radiusY: 1.5 * s,
-                        },
-                        &fill_brush,
-                    );
-                }
+                draw_slider(ctx, media_left, y + 73.5, bar_w, ratio, true, s, panel_alpha)?;
                 let time_brush = solid(ctx, &secondary)?;
                 time_brush.SetOpacity(0.65 * panel_alpha);
                 draw_text(
@@ -1649,24 +1670,37 @@ impl Renderer {
                 glyph_brush.SetOpacity(0.85 * panel_alpha);
                 draw_text(
                     ctx,
-                    "\u{23EE}",
-                    &self.fmt_glyph,
+                    "\u{E892}",
+                    &self.fmt_icon,
                     scaled_rect(wide.prev.x, wide.prev.y, wide.prev.w, wide.prev.h, s),
                     &glyph_brush,
                 );
-                let play_brush = solid(ctx, &primary)?;
+                let play_disc = violet_gradient(
+                    ctx,
+                    &scaled_rect(wide.play.x, wide.play.y, wide.play.w, wide.play.h, s),
+                    panel_alpha,
+                )?;
+                ctx.FillEllipse(
+                    &circle(
+                        (wide.play.x + wide.play.w * 0.5) * s,
+                        (wide.play.y + wide.play.h * 0.5) * s,
+                        wide.play.w * 0.5 * s,
+                    ),
+                    &play_disc,
+                );
+                let play_brush = solid(ctx, &theme::rgb(0xFFFFFF, 1.0))?;
                 play_brush.SetOpacity(panel_alpha);
                 draw_text(
                     ctx,
-                    if p.media.playing { "\u{23F8}" } else { "\u{25B6}" },
-                    &self.fmt_glyph,
+                    if p.media.playing { "\u{E769}" } else { "\u{E768}" },
+                    &self.fmt_icon,
                     scaled_rect(wide.play.x, wide.play.y, wide.play.w, wide.play.h, s),
                     &play_brush,
                 );
                 draw_text(
                     ctx,
-                    "\u{23ED}",
-                    &self.fmt_glyph,
+                    "\u{E893}",
+                    &self.fmt_icon,
                     scaled_rect(wide.next.x, wide.next.y, wide.next.w, wide.next.h, s),
                     &glyph_brush,
                 );
@@ -1695,53 +1729,40 @@ impl Renderer {
                     ),
                 ];
                 for (index, (label, value, text)) in metrics.iter().enumerate() {
-                    let col_x = x + 576.0 + index as f32 * 64.0;
-                    let m_label = solid(ctx, &secondary)?;
-                    m_label.SetOpacity(0.5 * panel_alpha);
-                    draw_text(
-                        ctx,
-                        label,
-                        &self.fmt_status,
-                        scaled_rect(col_x, y + 30.0, 60.0, 12.0, s),
-                        &m_label,
-                    );
+                    let cx = x + 576.0 + index as f32 * 64.0 + 29.0;
+                    let cy = y + 54.0;
+                    let ring_color = if index == 2 {
+                        if *value <= 15.0 {
+                            theme::rgb(theme::color::DANGER, 1.0)
+                        } else {
+                            theme::rgb(theme::color::SUCCESS, 1.0)
+                        }
+                    } else if *value >= theme::metric::DANGER_THRESHOLD {
+                        theme::rgb(theme::color::DANGER, 1.0)
+                    } else if *value >= theme::metric::WARNING_THRESHOLD {
+                        theme::rgb(theme::color::WARNING, 1.0)
+                    } else {
+                        accent
+                    };
+                    draw_ring(ctx, cx, cy, 22.0, 4.0, value / 100.0, &ring_color, s, panel_alpha)?;
                     let m_value = solid(ctx, &primary)?;
                     m_value.SetOpacity(panel_alpha);
                     draw_text(
                         ctx,
                         text,
-                        &self.fmt_wide_value,
-                        scaled_rect(col_x, y + 48.0, 60.0, 24.0, s),
+                        &self.fmt_clock,
+                        scaled_rect(cx - 22.0, cy - 10.0, 44.0, 20.0, s),
                         &m_value,
                     );
-                    let m_track = solid(ctx, &track)?;
-                    m_track.SetOpacity(0.85 * panel_alpha);
-                    ctx.FillRoundedRectangle(
-                        &D2D1_ROUNDED_RECT {
-                            rect: scaled_rect_raw(col_x, y + 86.0, 58.0, 3.0, s),
-                            radiusX: 1.5 * s,
-                            radiusY: 1.5 * s,
-                        },
-                        &m_track,
+                    let m_label = solid(ctx, &secondary)?;
+                    m_label.SetOpacity(0.7 * panel_alpha);
+                    draw_text(
+                        ctx,
+                        label,
+                        &self.fmt_tab,
+                        scaled_rect(cx - 30.0, y + 84.0, 60.0, 14.0, s),
+                        &m_label,
                     );
-                    if *value > 0.5 {
-                        let m_fill = solid(ctx, &accent)?;
-                        m_fill.SetOpacity(panel_alpha);
-                        ctx.FillRoundedRectangle(
-                            &D2D1_ROUNDED_RECT {
-                                rect: scaled_rect_raw(
-                                    col_x,
-                                    y + 86.0,
-                                    58.0 * (value / 100.0),
-                                    3.0,
-                                    s,
-                                ),
-                                radiusX: 1.5 * s,
-                                radiusY: 1.5 * s,
-                            },
-                            &m_fill,
-                        );
-                    }
                 }
 
                 let clock_brush = solid(ctx, &primary)?;
@@ -1789,7 +1810,6 @@ impl Renderer {
             let primary = solid(ctx, &theme::rgb(theme::color::TEXT_PRIMARY, 1.0))?;
             let secondary = solid(ctx, &theme::rgb(theme::color::TEXT_SECONDARY, 1.0))?;
             let accent = solid(ctx, &theme::rgb(theme::color::ACCENT_PRIMARY, 1.0))?;
-            let track = solid(ctx, &theme::rgb(theme::color::BG_ELEVATED, 1.0))?;
             let border_color = theme::rgb(theme::color::VIOLET_800, 0.32 * p.opacity);
 
             for card in [crate::state::quick_card(), crate::state::shelf_card()] {
@@ -1861,92 +1881,78 @@ impl Renderer {
             let pad = 32.0;
             draw_text(
                 ctx,
-                "QUICK CONTROLS",
-                &self.fmt_status,
-                scaled_rect(pad, 28.0, 220.0, 14.0, s),
-                &secondary,
+                "Quick Controls",
+                &self.fmt_card_title,
+                scaled_rect(pad, 22.0, 220.0, 20.0, s),
+                &primary,
             );
 
-            let (wifi, wifi_on) = match p.net.wifi {
-                Some(true) => ("WI-FI ON", true),
-                Some(false) => ("WI-FI OFF", false),
-                None => ("WI-FI N/A", false),
+            // Wi-Fi / Bluetooth tiles with round icon badges.
+            let wifi_state = match p.net.wifi {
+                Some(true) => ("Connected", true),
+                Some(false) => ("Off", false),
+                None => ("N/A", false),
             };
-            let (bt, bt_on) = match p.net.bluetooth {
-                Some(true) => ("BT ON", true),
-                Some(false) => ("BT OFF", false),
-                None => ("BT N/A", false),
+            let bt_state = match p.net.bluetooth {
+                Some(true) => ("On", true),
+                Some(false) => ("Off", false),
+                None => ("N/A", false),
             };
-            let wifi_brush = if wifi_on {
-                solid(ctx, &theme::rgb(theme::color::SUCCESS, 1.0))?
-            } else {
-                solid(ctx, &theme::rgb(theme::color::TEXT_MUTED, 1.0))?
-            };
-            draw_text(ctx, wifi, &self.fmt_status, scaled_rect(pad, 48.0, 120.0, 14.0, s), &wifi_brush);
-            let bt_brush = if bt_on {
-                solid(ctx, &theme::rgb(theme::color::SUCCESS, 1.0))?
-            } else {
-                solid(ctx, &theme::rgb(theme::color::TEXT_MUTED, 1.0))?
-            };
-            draw_text(ctx, bt, &self.fmt_status, scaled_rect(pad + 130.0, 48.0, 120.0, 14.0, s), &bt_brush);
+            let tile_bg = solid(ctx, &theme::rgb(theme::color::BG_INTERACTIVE, 0.75))?;
+            for (index, (glyph, name, (state, on))) in [
+                ("\u{E701}", "Wi-Fi", wifi_state),
+                ("\u{E702}", "Bluetooth", bt_state),
+            ]
+            .into_iter()
+            .enumerate()
+            {
+                let tx = pad + index as f32 * 184.0;
+                ctx.FillRoundedRectangle(
+                    &D2D1_ROUNDED_RECT {
+                        rect: scaled_rect(tx, 46.0, 176.0, 30.0, s),
+                        radiusX: 10.0 * s,
+                        radiusY: 10.0 * s,
+                    },
+                    &tile_bg,
+                );
+                draw_icon_badge(ctx, &self.fmt_icon_sm, glyph, tx + 16.0, 61.0, 11.0, on, s, 1.0)?;
+                draw_text(ctx, name, &self.fmt_pill_title, scaled_rect(tx + 34.0, 46.0, 80.0, 30.0, s), &primary);
+                let state_brush = solid(
+                    ctx,
+                    &theme::rgb(if on { theme::color::VIOLET_400 } else { theme::color::TEXT_MUTED }, 1.0),
+                )?;
+                draw_text(ctx, state, &self.fmt_small, scaled_rect(tx + 108.0, 46.0, 64.0, 30.0, s), &state_brush);
+            }
 
-            draw_text(ctx, "VOLUME", &self.fmt_label, scaled_rect(pad, 80.0, 160.0, 14.0, s), &secondary);
+            draw_text(ctx, "\u{E767}", &self.fmt_icon_sm, scaled_rect(pad, 80.0, 16.0, 16.0, s), &secondary);
+            draw_text(ctx, "Audio", &self.fmt_label, scaled_rect(pad + 22.0, 80.0, 160.0, 14.0, s), &primary);
             let volume_text = if p.muted {
-                "MUTED".to_string()
+                "Muted".to_string()
             } else {
                 format!("{:.0}%", p.volume * 100.0)
             };
             draw_text(ctx, &volume_text, &self.fmt_value, scaled_rect(232.0, 80.0, 160.0, 14.0, s), &primary);
-            ctx.FillRoundedRectangle(
-                &D2D1_ROUNDED_RECT {
-                    rect: scaled_rect_raw(pad, 102.0, 360.0, 3.0, s),
-                    radiusX: 1.5 * s,
-                    radiusY: 1.5 * s,
-                },
-                &track,
-            );
-            if p.volume > 0.001 && !p.muted {
-                ctx.FillRoundedRectangle(
-                    &D2D1_ROUNDED_RECT {
-                        rect: scaled_rect_raw(pad, 102.0, 360.0 * p.volume.clamp(0.0, 1.0), 3.0, s),
-                        radiusX: 1.5 * s,
-                        radiusY: 1.5 * s,
-                    },
-                    &accent,
-                );
-            }
+            let vol = if p.muted { 0.0 } else { p.volume };
+            draw_slider(ctx, pad, 103.0, 360.0, vol, true, s, 1.0)?;
 
-            draw_text(ctx, "BRIGHTNESS", &self.fmt_label, scaled_rect(pad, 126.0, 180.0, 14.0, s), &secondary);
+            draw_text(ctx, "\u{E706}", &self.fmt_icon_sm, scaled_rect(pad, 126.0, 16.0, 16.0, s), &secondary);
+            draw_text(ctx, "Brightness", &self.fmt_label, scaled_rect(pad + 22.0, 126.0, 180.0, 14.0, s), &primary);
             let bright = if p.has_brightness {
                 format!("{:.0}%", p.brightness * 100.0)
             } else {
                 "N/A".to_string()
             };
             draw_text(ctx, &bright, &self.fmt_value, scaled_rect(232.0, 126.0, 160.0, 14.0, s), &primary);
-            ctx.FillRoundedRectangle(
-                &D2D1_ROUNDED_RECT {
-                    rect: scaled_rect_raw(pad, 148.0, 360.0, 3.0, s),
-                    radiusX: 1.5 * s,
-                    radiusY: 1.5 * s,
-                },
-                &track,
-            );
-            if p.has_brightness && p.brightness > 0.001 {
-                ctx.FillRoundedRectangle(
-                    &D2D1_ROUNDED_RECT {
-                        rect: scaled_rect_raw(
-                            pad,
-                            148.0,
-                            360.0 * p.brightness.clamp(0.0, 1.0),
-                            3.0,
-                            s,
-                        ),
-                        radiusX: 1.5 * s,
-                        radiusY: 1.5 * s,
-                    },
-                    &accent,
-                );
-            }
+            draw_slider(
+                ctx,
+                pad,
+                149.0,
+                360.0,
+                if p.has_brightness { p.brightness } else { 0.0 },
+                p.has_brightness,
+                s,
+                1.0,
+            )?;
 
             let divider = solid(ctx, &border_color)?;
             ctx.FillRectangle(
@@ -1961,11 +1967,11 @@ impl Renderer {
 
             let chip_bg = solid(ctx, &theme::rgb(theme::color::BG_INTERACTIVE, 0.75))?;
             let chip_border = solid(ctx, &theme::rgb(theme::color::VIOLET_800, 0.45))?;
-            for (rect, label, active) in [
-                (hits.focus, "FOCUS", p.focus_running),
-                (hits.battery, "BATTERY", false),
-                (hits.record, "RECORD", false),
-                (hits.theme, "THEME", false),
+            for (rect, glyph, label, active, glyph_color) in [
+                (hits.focus, "\u{E7E8}", "Focus Mode", p.focus_running, theme::color::VIOLET_400),
+                (hits.battery, "\u{EBA6}", "Battery Saver", false, theme::color::SUCCESS),
+                (hits.record, "\u{E7C8}", "Screen Record", false, theme::color::DANGER),
+                (hits.theme, "\u{E790}", "Theme", false, theme::color::VIOLET_300),
             ] {
                 let rr = D2D1_ROUNDED_RECT {
                     rect: scaled_rect(rect.x, rect.y, rect.w, rect.h, s),
@@ -1979,25 +1985,27 @@ impl Renderer {
                     ctx.FillRoundedRectangle(&rr, &chip_bg);
                 }
                 ctx.DrawRoundedRectangle(&rr, &chip_border, 1.0, None);
-                let brush = if active { &accent } else { &secondary };
+                let icon = solid(ctx, &theme::rgb(glyph_color, 1.0))?;
+                draw_text(
+                    ctx,
+                    glyph,
+                    &self.fmt_icon_sm,
+                    scaled_rect(rect.x + 8.0, rect.y, 22.0, rect.h, s),
+                    &icon,
+                );
+                let brush = if active { &accent } else { &primary };
                 draw_text(
                     ctx,
                     label,
-                    &self.fmt_tab,
-                    scaled_rect(rect.x, rect.y, rect.w, rect.h, s),
+                    &self.fmt_pill_title,
+                    scaled_rect(rect.x + 34.0, rect.y, rect.w - 40.0, rect.h, s),
                     brush,
                 );
             }
 
-            draw_text(
-                ctx,
-                "FOCUS + AKSI SISTEM",
-                &self.fmt_status,
-                scaled_rect(pad, 306.0, 260.0, 12.0, s),
-                &secondary,
-            );
-
-            draw_text(ctx, "FILE SHELF", &self.fmt_status, scaled_rect(pad, 372.0, 220.0, 14.0, s), &secondary);
+            let folder = solid(ctx, &theme::rgb(theme::color::WARNING, 1.0))?;
+            draw_text(ctx, "\u{E8B7}", &self.fmt_icon_sm, scaled_rect(pad, 366.0, 16.0, 20.0, s), &folder);
+            draw_text(ctx, "File Shelf", &self.fmt_card_title, scaled_rect(pad + 22.0, 366.0, 220.0, 20.0, s), &primary);
             let clear_brush = solid(ctx, &theme::rgb(theme::color::TEXT_MUTED, 1.0))?;
             draw_text(
                 ctx,
@@ -2024,7 +2032,19 @@ impl Renderer {
                     .file_name()
                     .map(|name| name.to_string_lossy().to_string())
                     .unwrap_or_else(|| path.clone());
-                draw_text(ctx, &name, &self.fmt_small, scaled_rect(row.x, row.y, row.w - 48.0, row.h, s), &primary);
+                let ext = std::path::Path::new(path)
+                    .extension()
+                    .map(|e| e.to_string_lossy().to_ascii_lowercase())
+                    .unwrap_or_default();
+                let file_color = match ext.as_str() {
+                    "pdf" => theme::color::DANGER,
+                    "png" | "jpg" | "jpeg" | "gif" | "webp" | "svg" => theme::color::SUCCESS,
+                    "zip" | "7z" | "rar" => theme::color::WARNING,
+                    _ => theme::color::INFO,
+                };
+                let file_brush = solid(ctx, &theme::rgb(file_color, 1.0))?;
+                draw_text(ctx, "\u{E8A5}", &self.fmt_icon_sm, scaled_rect(row.x, row.y, 16.0, row.h, s), &file_brush);
+                draw_text(ctx, &name, &self.fmt_small, scaled_rect(row.x + 22.0, row.y, row.w - 70.0, row.h, s), &primary);
                 draw_text(
                     ctx,
                     "OPEN",
@@ -2259,4 +2279,215 @@ fn format(
         let _ = fmt.SetParagraphAlignment(paragraph);
         Ok(fmt)
     }
+}
+
+/// Brand gradient (Violet 500 -> Violet 700), diagonal across `rect`.
+unsafe fn violet_gradient(
+    ctx: &ID2D1DeviceContext,
+    rect: &D2D_RECT_F,
+    alpha: f32,
+) -> Result<ID2D1LinearGradientBrush> {
+    let stops = [
+        D2D1_GRADIENT_STOP {
+            position: 0.0,
+            color: theme::rgb(theme::color::VIOLET_500, alpha),
+        },
+        D2D1_GRADIENT_STOP {
+            position: 1.0,
+            color: theme::rgb(theme::color::VIOLET_700, alpha),
+        },
+    ];
+    let collection = ctx.CreateGradientStopCollection(
+        &stops,
+        D2D1_COLOR_SPACE_SRGB,
+        D2D1_COLOR_SPACE_SRGB,
+        D2D1_BUFFER_PRECISION_8BPC_UNORM,
+        D2D1_EXTEND_MODE_CLAMP,
+        D2D1_COLOR_INTERPOLATION_MODE_STRAIGHT,
+    )?;
+    let props = D2D1_LINEAR_GRADIENT_BRUSH_PROPERTIES {
+        startPoint: Vector2 { X: rect.left, Y: rect.top },
+        endPoint: Vector2 { X: rect.right, Y: rect.bottom },
+    };
+    ctx.CreateLinearGradientBrush(&props, None, &collection)
+}
+
+unsafe fn circle(cx: f32, cy: f32, r: f32) -> D2D1_ELLIPSE {
+    D2D1_ELLIPSE {
+        point: Vector2 { X: cx, Y: cy },
+        radiusX: r,
+        radiusY: r,
+    }
+}
+
+/// NOTCH app mark: a glowing violet disc with a bold "N". Coordinates in DIPs.
+unsafe fn draw_logo(
+    ctx: &ID2D1DeviceContext,
+    fmt: &IDWriteTextFormat,
+    cx: f32,
+    cy: f32,
+    r: f32,
+    s: f32,
+    alpha: f32,
+) -> Result<()> {
+    let glow = solid(ctx, &theme::rgb(theme::color::VIOLET_600, 0.22 * alpha))?;
+    ctx.FillEllipse(&circle(cx * s, cy * s, (r + 3.0) * s), &glow);
+    let rect = scaled_rect(cx - r, cy - r, r * 2.0, r * 2.0, s);
+    let fill = violet_gradient(ctx, &rect, alpha)?;
+    ctx.FillEllipse(&circle(cx * s, cy * s, r * s), &fill);
+    let rim = solid(ctx, &theme::rgb(theme::color::VIOLET_300, 0.45 * alpha))?;
+    ctx.DrawEllipse(&circle(cx * s, cy * s, r * s), &rim, 1.0, None);
+    let text = solid(ctx, &theme::rgb(0xFFFFFF, alpha))?;
+    draw_text(ctx, "N", fmt, rect, &text);
+    Ok(())
+}
+
+/// Album artwork clipped to a rounded square, with a hairline rim.
+unsafe fn draw_rounded_art(
+    ctx: &ID2D1DeviceContext,
+    art: &ID2D1Bitmap1,
+    rect: D2D_RECT_F,
+    radius: f32,
+    alpha: f32,
+) -> Result<()> {
+    let bitmap: ID2D1Bitmap = art.cast()?;
+    let size = bitmap.GetSize();
+    let brush = ctx.CreateBitmapBrush(&bitmap, None, None)?;
+    let sx = (rect.right - rect.left) / size.width.max(1.0);
+    let sy = (rect.bottom - rect.top) / size.height.max(1.0);
+    brush.SetTransform(&windows_numerics::Matrix3x2 {
+        M11: sx,
+        M12: 0.0,
+        M21: 0.0,
+        M22: sy,
+        M31: rect.left,
+        M32: rect.top,
+    });
+    brush.SetOpacity(alpha);
+    let rr = D2D1_ROUNDED_RECT {
+        rect,
+        radiusX: radius,
+        radiusY: radius,
+    };
+    ctx.FillRoundedRectangle(&rr, &brush);
+    let rim = solid(ctx, &theme::rgb(0xFFFFFF, 0.10 * alpha))?;
+    ctx.DrawRoundedRectangle(&rr, &rim, 1.0, None);
+    Ok(())
+}
+
+/// Circular gauge: graphite track plus a violet arc from 12 o'clock, clockwise.
+#[allow(clippy::too_many_arguments)]
+unsafe fn draw_ring(
+    ctx: &ID2D1DeviceContext,
+    cx: f32,
+    cy: f32,
+    r: f32,
+    thickness: f32,
+    ratio: f32,
+    color: &D2D1_COLOR_F,
+    s: f32,
+    alpha: f32,
+) -> Result<()> {
+    let track = solid(ctx, &theme::rgb(theme::color::GRAPHITE_700, alpha))?;
+    ctx.DrawEllipse(&circle(cx * s, cy * s, r * s), &track, thickness * s, None);
+    let ratio = ratio.clamp(0.0, 1.0);
+    if ratio <= 0.005 {
+        return Ok(());
+    }
+    let arc = solid(ctx, color)?;
+    arc.SetOpacity(alpha);
+    let steps = (72.0 * ratio).ceil().max(2.0) as usize;
+    let sweep = std::f32::consts::TAU * ratio;
+    let point = |a: f32| Vector2 {
+        X: (cx + r * a.sin()) * s,
+        Y: (cy - r * a.cos()) * s,
+    };
+    for i in 0..steps {
+        let a0 = sweep * i as f32 / steps as f32;
+        let a1 = sweep * (i + 1) as f32 / steps as f32;
+        ctx.DrawLine(point(a0), point(a1), &arc, thickness * s, None);
+    }
+    // Round caps at both ends.
+    for a in [0.0, sweep] {
+        let p = point(a);
+        ctx.FillEllipse(&circle(p.X, p.Y, thickness * 0.5 * s), &arc);
+    }
+    Ok(())
+}
+
+/// Slider: graphite track, violet gradient fill, white thumb.
+#[allow(clippy::too_many_arguments)]
+unsafe fn draw_slider(
+    ctx: &ID2D1DeviceContext,
+    x: f32,
+    y: f32,
+    w: f32,
+    ratio: f32,
+    thumb: bool,
+    s: f32,
+    alpha: f32,
+) -> Result<()> {
+    let h = 4.0;
+    let track = solid(ctx, &theme::rgb(theme::color::GRAPHITE_700, alpha))?;
+    ctx.FillRoundedRectangle(
+        &D2D1_ROUNDED_RECT {
+            rect: scaled_rect(x, y, w, h, s),
+            radiusX: h * 0.5 * s,
+            radiusY: h * 0.5 * s,
+        },
+        &track,
+    );
+    let ratio = ratio.clamp(0.0, 1.0);
+    if ratio > 0.001 {
+        let rect = scaled_rect(x, y, w * ratio, h, s);
+        let fill = violet_gradient(ctx, &scaled_rect(x, y, w, h, s), alpha)?;
+        ctx.FillRoundedRectangle(
+            &D2D1_ROUNDED_RECT {
+                rect,
+                radiusX: h * 0.5 * s,
+                radiusY: h * 0.5 * s,
+            },
+            &fill,
+        );
+    }
+    if thumb {
+        let cx = (x + w * ratio) * s;
+        let cy = (y + h * 0.5) * s;
+        let glow = solid(ctx, &theme::rgb(theme::color::VIOLET_600, 0.30 * alpha))?;
+        ctx.FillEllipse(&circle(cx, cy, 8.0 * s), &glow);
+        let knob = solid(ctx, &theme::rgb(0xFFFFFF, alpha))?;
+        ctx.FillEllipse(&circle(cx, cy, 5.5 * s), &knob);
+    }
+    Ok(())
+}
+
+/// Round icon badge (Segoe MDL2 glyph), violet when active.
+#[allow(clippy::too_many_arguments)]
+unsafe fn draw_icon_badge(
+    ctx: &ID2D1DeviceContext,
+    fmt: &IDWriteTextFormat,
+    glyph: &str,
+    cx: f32,
+    cy: f32,
+    r: f32,
+    active: bool,
+    s: f32,
+    alpha: f32,
+) -> Result<()> {
+    let rect = scaled_rect(cx - r, cy - r, r * 2.0, r * 2.0, s);
+    if active {
+        let fill = violet_gradient(ctx, &rect, alpha)?;
+        ctx.FillEllipse(&circle(cx * s, cy * s, r * s), &fill);
+    } else {
+        let fill = solid(ctx, &theme::rgb(theme::color::GRAPHITE_700, alpha))?;
+        ctx.FillEllipse(&circle(cx * s, cy * s, r * s), &fill);
+    }
+    let color = if active {
+        theme::rgb(0xFFFFFF, alpha)
+    } else {
+        theme::rgb(theme::color::TEXT_SECONDARY, alpha)
+    };
+    let brush = solid(ctx, &color)?;
+    draw_text(ctx, glyph, fmt, rect, &brush);
+    Ok(())
 }

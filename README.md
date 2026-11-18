@@ -8,7 +8,7 @@ kompositor Windows, jadi aplikasi hanya menggambar ketika ada yang berubah.
 
 ## Status
 
-v1.3 — kartu desktop. Yang sudah ada:
+v1.4 — visual mengikuti referensi brand (logo N di pill, ring gauge, slider violet, ikon). Yang sudah ada:
 
 **Tiga layout**
 - `Panel` (default): panel vertikal dengan 7 halaman.
