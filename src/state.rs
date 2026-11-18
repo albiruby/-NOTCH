@@ -595,7 +595,7 @@ pub mod hub {
     const MEDIA_H: f32 = 190.0;
     const CLIP_H: f32 = 232.0;
     const FOCUS_H: f32 = 150.0;
-    const QUICK_H: f32 = 330.0;
+    const QUICK_H: f32 = 270.0;
     const SHELF_H: f32 = 160.0;
     const DOCK_ITEM: f32 = 56.0;
     const DOCK_H: f32 = 68.0;
