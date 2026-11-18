@@ -72,7 +72,7 @@ impl Metrics {
                 (424.0, 568.0, 424.0, 568.0, 0.0)
             } else if layout == Layout::Hub {
                 // The pill grows into a top bar; cards float beneath it.
-                (hub::W, hub::H, 620.0, 52.0, 26.0)
+                (hub::w(), hub::h(), 620.0, 52.0, 26.0)
             } else {
                 // The expanded panel has a fixed content layout, so it never
                 // shrinks below the height that layout needs.
@@ -567,71 +567,154 @@ impl Spring {
 }
 
 /// Geometry of the Hub overlay, in DIPs relative to the hub canvas.
+///
+/// The canvas fills the monitor's work area, so cards sit against the
+/// screen edges (left column, right column, centre under the top bar, dock
+/// at the bottom) and the middle of the desktop stays clear.
 pub mod hub {
     use super::Rect;
+    use std::sync::atomic::{AtomicU32, Ordering};
 
-    pub const W: f32 = 1240.0;
-    pub const H: f32 = 760.0;
+    static CANVAS_W: AtomicU32 = AtomicU32::new(0x449B0000); // 1240.0
+    static CANVAS_H: AtomicU32 = AtomicU32::new(0x443E0000); // 760.0
+
+    /// Smallest canvas the layout is designed for; smaller screens scroll
+    /// the bottom row off-screen instead of overlapping cards.
+    pub const MIN_W: f32 = 1240.0;
+    pub const MIN_H: f32 = 760.0;
+
+    /// Outer margin from the screen edge and gap between stacked cards.
+    pub const MARGIN: f32 = 28.0;
+    pub const GAP: f32 = 24.0;
+    /// First card row starts below the top bar.
+    pub const TOP: f32 = 92.0;
+
+    const SIDE_W: f32 = 340.0;
+    const RIGHT_W: f32 = 400.0;
+    const MEDIA_W: f32 = 460.0;
+    const MEDIA_H: f32 = 190.0;
+    const CLIP_H: f32 = 232.0;
+    const FOCUS_H: f32 = 150.0;
+    const QUICK_H: f32 = 330.0;
+    const SHELF_H: f32 = 160.0;
+    const DOCK_ITEM: f32 = 56.0;
+    const DOCK_H: f32 = 68.0;
+
+    pub fn set_canvas(w: f32, h: f32) {
+        CANVAS_W.store(w.max(MIN_W).to_bits(), Ordering::Relaxed);
+        CANVAS_H.store(h.max(MIN_H).to_bits(), Ordering::Relaxed);
+    }
+    pub fn w() -> f32 {
+        f32::from_bits(CANVAS_W.load(Ordering::Relaxed))
+    }
+    pub fn h() -> f32 {
+        f32::from_bits(CANVAS_H.load(Ordering::Relaxed))
+    }
 
     const fn r(x: f32, y: f32, w: f32, h: f32) -> Rect {
         Rect { x, y, w, h }
     }
 
-    pub fn launcher() -> Rect {
-        r(16.0, 84.0, 340.0, 420.0)
-    }
+    // Left column: launcher on top, clipboard pinned to the bottom.
     pub fn clip() -> Rect {
-        r(16.0, 516.0, 340.0, 232.0)
+        r(MARGIN, h() - MARGIN - CLIP_H, SIDE_W, CLIP_H)
     }
+    pub fn launcher() -> Rect {
+        let bottom = clip().y - GAP;
+        r(MARGIN, TOP, SIDE_W, (bottom - TOP).clamp(260.0, 440.0))
+    }
+
+    // Centre: media + system under the top bar.
     pub fn media() -> Rect {
-        r(372.0, 84.0, 440.0, 190.0)
+        r((w() - MEDIA_W) * 0.5, TOP, MEDIA_W, MEDIA_H)
+    }
+
+    // Right column: focus and quick controls on top, shelf at the bottom.
+    fn right_x() -> f32 {
+        w() - MARGIN - RIGHT_W
     }
     pub fn focus() -> Rect {
-        r(828.0, 84.0, 400.0, 150.0)
+        r(right_x(), TOP, RIGHT_W, FOCUS_H)
     }
     pub fn quick() -> Rect {
-        r(828.0, 246.0, 400.0, 330.0)
+        r(right_x(), TOP + FOCUS_H + GAP, RIGHT_W, QUICK_H)
     }
     pub fn shelf() -> Rect {
-        r(828.0, 588.0, 400.0, 160.0)
+        let below_quick = quick().y + QUICK_H + GAP;
+        r(right_x(), (h() - MARGIN - SHELF_H).max(below_quick), RIGHT_W, SHELF_H)
     }
+
+    // Bottom centre: a dock with one tile per pinned app.
+    pub const DOCK_MAX: usize = 8;
+    pub fn dock(count: usize) -> Option<Rect> {
+        if count == 0 {
+            return None;
+        }
+        let n = count.min(DOCK_MAX) as f32;
+        let width = n * DOCK_ITEM + 16.0;
+        Some(r((w() - width) * 0.5, h() - MARGIN - DOCK_H, width, DOCK_H))
+    }
+    pub fn dock_item(count: usize, index: usize) -> Rect {
+        let dock = dock(count).unwrap_or(r(0.0, 0.0, 0.0, 0.0));
+        r(dock.x + 8.0 + index as f32 * DOCK_ITEM + 4.0, dock.y + 10.0, 48.0, 48.0)
+    }
+
     pub fn cards() -> [Rect; 6] {
         [launcher(), clip(), media(), focus(), quick(), shelf()]
     }
 
     /// Offsets that map the Cards-layout quick/shelf geometry into the hub.
-    pub const QUICK_OFFSET: (f32, f32) = (816.0, 234.0);
-    pub const SHELF_OFFSET: (f32, f32) = (816.0, 230.0);
+    pub fn quick_offset() -> (f32, f32) {
+        let q = quick();
+        (q.x - 12.0, q.y - 12.0)
+    }
+    pub fn shelf_offset() -> (f32, f32) {
+        let s = shelf();
+        (s.x - 12.0, s.y - 358.0)
+    }
 
     pub const APP_ROWS: usize = 6;
+    pub fn app_rows() -> usize {
+        let l = launcher();
+        (((l.h - 84.0) / 56.0).floor().max(0.0) as usize).min(APP_ROWS)
+    }
     pub fn app_row(index: usize) -> Rect {
-        r(28.0, 156.0 + index as f32 * 56.0, 316.0, 52.0)
+        let l = launcher();
+        r(l.x + 12.0, l.y + 72.0 + index as f32 * 56.0, l.w - 24.0, 52.0)
     }
     pub const CLIP_ROWS: usize = 5;
     pub fn clip_row(index: usize) -> Rect {
-        r(28.0, 556.0 + index as f32 * 36.0, 316.0, 34.0)
+        let c = clip();
+        r(c.x + 12.0, c.y + 44.0 + index as f32 * 36.0, c.w - 24.0, 34.0)
     }
     pub fn clip_clear() -> Rect {
-        r(272.0, 528.0, 72.0, 22.0)
+        let c = clip();
+        r(c.x + c.w - 84.0, c.y + 14.0, 72.0, 22.0)
     }
 
     pub fn prev() -> Rect {
-        r(492.0, 150.0, 36.0, 36.0)
+        let m = media();
+        r(m.x + 124.0, m.y + 66.0, 36.0, 36.0)
     }
     pub fn play() -> Rect {
-        r(536.0, 150.0, 36.0, 36.0)
+        let m = media();
+        r(m.x + 168.0, m.y + 66.0, 36.0, 36.0)
     }
     pub fn next() -> Rect {
-        r(580.0, 150.0, 36.0, 36.0)
+        let m = media();
+        r(m.x + 212.0, m.y + 66.0, 36.0, 36.0)
     }
     pub fn progress() -> Rect {
-        r(492.0, 200.0, 160.0, 18.0)
+        let m = media();
+        r(m.x + 124.0, m.y + 116.0, 168.0, 18.0)
     }
 
     pub fn focus_toggle() -> Rect {
-        r(1048.0, 176.0, 80.0, 34.0)
+        let f = focus();
+        r(f.x + 220.0, f.y + 92.0, 80.0, 34.0)
     }
     pub fn focus_reset() -> Rect {
-        r(1136.0, 176.0, 76.0, 34.0)
+        let f = focus();
+        r(f.x + 308.0, f.y + 92.0, 76.0, 34.0)
     }
 }

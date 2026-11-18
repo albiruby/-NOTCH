@@ -189,7 +189,7 @@ impl App {
             charging: self.charging,
             tasks: self.tasks.tasks.clone(),
             shelf_paths: self.shelf.paths.clone(),
-            apps: self.apps.iter().take(6).map(|app| app.name.clone()).collect(),
+            apps: self.apps.iter().take(8).map(|app| app.name.clone()).collect(),
             water: self.tasks.water,
             water_goal: self.tasks.water_goal,
             clip_items: self.clip_items.clone(),
@@ -277,6 +277,15 @@ impl App {
                 self.apply_layout(self.settings.layout, false);
             }
         }
+    }
+
+    /// Size the hub canvas to the monitor's work area (in DIPs).
+    fn fit_hub_canvas(&self) {
+        let (_, work) = window::monitor_rects(self.hwnd);
+        state::hub::set_canvas(
+            (work.right - work.left) as f32 / self.scale,
+            (work.bottom - work.top) as f32 / self.scale,
+        );
     }
 
     fn surface_px(&self) -> (i32, i32) {
@@ -418,7 +427,7 @@ impl App {
         use state::hub;
         if self.dragging_volume || self.dragging_brightness {
             let hits = state::card_hits();
-            let qx = x - hub::QUICK_OFFSET.0;
+            let qx = x - hub::quick_offset().0;
             if self.dragging_volume {
                 self.apply_volume(qx, &hits.volume);
             } else {
@@ -465,8 +474,22 @@ impl App {
             return;
         }
 
+        // Dock.
+        let docked = self.apps.len().min(hub::DOCK_MAX);
+        if let Some(dock) = hub::dock(docked) {
+            if dock.contains(x, y) {
+                for index in 0..docked {
+                    if hub::dock_item(docked, index).contains(x, y) {
+                        open_path(&self.apps[index].path);
+                        self.set_phase(Phase::Compact);
+                    }
+                }
+                return;
+            }
+        }
+
         // Launcher.
-        for index in 0..hub::APP_ROWS {
+        for index in 0..hub::app_rows() {
             if hub::app_row(index).contains(x, y) {
                 if let Some(entry) = self.apps.get(index) {
                     open_path(&entry.path);
@@ -517,7 +540,7 @@ impl App {
 
         // Quick controls (Cards geometry, shifted into the hub).
         let hits = state::card_hits();
-        let (qx, qy) = (x - hub::QUICK_OFFSET.0, y - hub::QUICK_OFFSET.1);
+        let (qx, qy) = (x - hub::quick_offset().0, y - hub::quick_offset().1);
         if hub::quick().contains(x, y) {
             if hits.focus.contains(qx, qy) {
                 self.focus_running = !self.focus_running;
@@ -536,7 +559,7 @@ impl App {
         }
 
         // File shelf.
-        let (sx, sy) = (x - hub::SHELF_OFFSET.0, y - hub::SHELF_OFFSET.1);
+        let (sx, sy) = (x - hub::shelf_offset().0, y - hub::shelf_offset().1);
         if hub::shelf().contains(x, y) {
             if hits.clear.contains(sx, sy) {
                 self.shelf.clear();
@@ -565,7 +588,7 @@ impl App {
         if self.layout == Layout::Hub && self.state.phase == Phase::Expanded {
             // While open, the whole canvas takes clicks so a click on empty
             // space can close the hub.
-            return x >= 0.0 && y >= 0.0 && x <= state::hub::W && y <= state::hub::H;
+            return x >= 0.0 && y >= 0.0 && x <= state::hub::w() && y <= state::hub::h();
         }
         if self.layout == Layout::Cards {
             return state::quick_card().contains(x, y) || state::shelf_card().contains(x, y);
@@ -633,6 +656,9 @@ impl App {
         if persist {
             self.settings.layout = layout;
             self.settings.save();
+        }
+        if layout == Layout::Hub {
+            self.fit_hub_canvas();
         }
         self.metrics = Metrics::for_layout(&self.settings, layout);
         if layout == Layout::Cards {
@@ -992,6 +1018,10 @@ unsafe extern "system" fn notch_wndproc(
                 (*ptr).state.t = 1.0;
                 (*ptr).spring = Spring::new(1.0);
             }
+            if layout == Layout::Hub {
+                // The canvas size depends on the monitor, known only now.
+                (*ptr).apply_layout(Layout::Hub, false);
+            }
             (*ptr).draw();
             let placed = if layout == Layout::Cards {
                 window::place_right(hwnd, width as i32, height as i32, (16.0 * scale) as i32)
@@ -1050,7 +1080,7 @@ unsafe extern "system" fn notch_wndproc(
                 }
 
                 if app.layout == Layout::Cards || (app.layout == Layout::Hub && (app.dragging_volume || app.dragging_brightness)) {
-                    let x = if app.layout == Layout::Hub { x - state::hub::QUICK_OFFSET.0 } else { x };
+                    let x = if app.layout == Layout::Hub { x - state::hub::quick_offset().0 } else { x };
                     let hits = state::card_hits();
                     if app.dragging_volume {
                         app.apply_volume(x, &hits.volume);
@@ -1199,7 +1229,7 @@ unsafe extern "system" fn notch_wndproc(
                     let _ = SetCapture(hwnd);
                 }
                 if app.layout == Layout::Hub && app.state.phase == Phase::Expanded {
-                    let (dx, dy) = state::hub::QUICK_OFFSET;
+                    let (dx, dy) = state::hub::quick_offset();
                     let (qx, qy) = (x - dx, y - dy);
                     let hits = state::card_hits();
                     if hits.volume.contains(qx, qy) {
@@ -1662,6 +1692,10 @@ unsafe extern "system" fn notch_wndproc(
         WM_DISPLAYCHANGE | WM_DPICHANGED => {
             if let Some(app) = app(hwnd) {
                 app.scale = window::scale_for(hwnd);
+                if app.layout == Layout::Hub {
+                    app.fit_hub_canvas();
+                    app.metrics = Metrics::for_layout(&app.settings, app.layout);
+                }
                 let width = (app.metrics.surface_w * app.scale).round() as i32;
                 let height = (app.metrics.surface_h * app.scale).round() as i32;
                 let _ = app.renderer.resize(width as u32, height as u32);

@@ -1818,7 +1818,7 @@ impl Renderer {
                 M32: (offset.1 + slide) * s,
             };
             if let Some(slide) = hub {
-                ctx.SetTransform(&shift(crate::state::hub::QUICK_OFFSET, slide));
+                ctx.SetTransform(&shift(crate::state::hub::quick_offset(), slide));
             }
             for card in [crate::state::quick_card(), crate::state::shelf_card()] {
                 if hub.is_some() {
@@ -1949,7 +1949,7 @@ impl Renderer {
             }
 
             if let Some(slide) = hub {
-                ctx.SetTransform(&shift(crate::state::hub::SHELF_OFFSET, slide));
+                ctx.SetTransform(&shift(crate::state::hub::shelf_offset(), slide));
                 let shelf = crate::state::shelf_card();
                 let visible = crate::state::hub::shelf().h;
                 ctx.PushAxisAlignedClip(
@@ -2078,7 +2078,7 @@ impl Renderer {
             if p.apps.is_empty() {
                 draw_text(ctx, "No pinned apps found.", &self.fmt_body, scaled_rect(l.x + 24.0, l.y + 80.0, 280.0, 20.0, s), &muted);
             }
-            for (index, name) in p.apps.iter().take(hub::APP_ROWS).enumerate() {
+            for (index, name) in p.apps.iter().take(hub::app_rows()).enumerate() {
                 let row = hub::app_row(index);
                 let cy = row.y + row.h * 0.5;
                 let initial: String = name.chars().next().map(|c| c.to_uppercase().collect()).unwrap_or_default();
@@ -2118,8 +2118,8 @@ impl Renderer {
             } else {
                 ("Nothing playing", "Play something to control it here")
             };
-            draw_text(ctx, title, &self.fmt_wide_title, scaled_rect(m.x + 120.0, m.y + 20.0, 168.0, 20.0, s), &primary);
-            draw_text(ctx, artist, &self.fmt_wide_sub, scaled_rect(m.x + 120.0, m.y + 42.0, 168.0, 16.0, s), &secondary);
+            draw_text(ctx, title, &self.fmt_wide_title, scaled_rect(m.x + 124.0, m.y + 20.0, 176.0, 20.0, s), &primary);
+            draw_text(ctx, artist, &self.fmt_wide_sub, scaled_rect(m.x + 124.0, m.y + 42.0, 176.0, 16.0, s), &secondary);
             let (prev, play, next) = (hub::prev(), hub::play(), hub::next());
             draw_text(ctx, "\u{E892}", &self.fmt_icon, scaled_rect(prev.x, prev.y, prev.w, prev.h, s), &secondary);
             let disc = violet_gradient(ctx, &scaled_rect(play.x, play.y, play.w, play.h, s), 1.0)?;
@@ -2148,7 +2148,7 @@ impl Renderer {
                 &muted,
             );
             let divider = solid(ctx, &theme::rgb(0xFFFFFF, 0.08))?;
-            ctx.FillRectangle(&scaled_rect(m.x + 292.0, m.y + 20.0, 1.0, m.h - 40.0, s), &divider);
+            ctx.FillRectangle(&scaled_rect(m.x + 312.0, m.y + 20.0, 1.0, m.h - 40.0, s), &divider);
             let battery = p.battery.map(|b| b as f32).unwrap_or(0.0);
             let rings = [
                 ("CPU", p.cpu.clamp(0.0, 100.0), format!("{:.0}%", p.cpu)),
@@ -2160,7 +2160,7 @@ impl Renderer {
                 ),
             ];
             for (index, (label, value, text)) in rings.iter().enumerate() {
-                let cx = m.x + 320.0 + index as f32 * 44.0;
+                let cx = m.x + 340.0 + index as f32 * 46.0;
                 let cy = m.y + 66.0;
                 let color = if index == 2 {
                     if *value <= 15.0 { theme::color::DANGER } else { theme::color::SUCCESS }
@@ -2175,8 +2175,8 @@ impl Renderer {
                 draw_text(ctx, text, &self.fmt_tab, scaled_rect(cx - 17.0, cy - 8.0, 34.0, 16.0, s), &primary);
                 draw_text(ctx, label, &self.fmt_tab, scaled_rect(cx - 22.0, cy + 22.0, 44.0, 14.0, s), &muted);
             }
-            draw_text(ctx, &p.date, &self.fmt_small, scaled_rect(m.x + 304.0, m.y + 120.0, 124.0, 16.0, s), &secondary);
-            draw_text(ctx, &p.time, &self.fmt_card_title, scaled_rect(m.x + 304.0, m.y + 138.0, 124.0, 24.0, s), &primary);
+            draw_text(ctx, &p.date, &self.fmt_small, scaled_rect(m.x + 326.0, m.y + 120.0, 124.0, 16.0, s), &secondary);
+            draw_text(ctx, &p.time, &self.fmt_card_title, scaled_rect(m.x + 326.0, m.y + 138.0, 124.0, 24.0, s), &primary);
 
             // Focus.
             let f = hub::focus();
@@ -2204,6 +2204,18 @@ impl Renderer {
                 draw_text(ctx, label, &self.fmt_tab, scaled_rect(rect.x, rect.y, rect.w, rect.h, s), &primary);
             }
             draw_slider(ctx, f.x + 20.0, f.y + 124.0, f.w - 40.0, 1.0 - p.focus_remaining / 1500.0, false, s, 1.0)?;
+
+            // Dock.
+            let docked = p.apps.len().min(hub::DOCK_MAX);
+            if let Some(dock) = hub::dock(docked) {
+                draw_glass(ctx, scaled_rect(dock.x, dock.y, dock.w, dock.h, s), 22.0 * s, p.opacity, Glass::Card, s)?;
+                for (index, name) in p.apps.iter().take(docked).enumerate() {
+                    let item = hub::dock_item(docked, index);
+                    let initial: String = name.chars().next().map(|c| c.to_uppercase().collect()).unwrap_or_default();
+                    draw_glass(ctx, scaled_rect(item.x, item.y, item.w, item.h, s), 14.0 * s, 1.0, Glass::Tile, s)?;
+                    draw_text(ctx, &initial, &self.fmt_card_title_center, scaled_rect(item.x, item.y, item.w, item.h, s), &accent);
+                }
+            }
 
             ctx.SetTransform(&windows_numerics::Matrix3x2::identity());
         }

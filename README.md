@@ -8,10 +8,10 @@ kompositor Windows, jadi aplikasi hanya menggambar ketika ada yang berubah.
 
 ## Status
 
-v1.7 — dynamic island bisa di-drag bebas dan menempel ke tepi/tengah layar. Layout Hub jadi default (klik pill, semua widget muncul). Glassmorphism penuh: permukaan tembus pandang, kilau diagonal, tepi bercahaya, bayangan lembut. Visual mengikuti referensi brand. Yang sudah ada:
+v1.8 — Hub memenuhi layar dengan tata letak lega ala referensi. Dynamic island bisa di-drag bebas dan menempel ke tepi/tengah layar. Layout Hub jadi default (klik pill, semua widget muncul). Glassmorphism penuh: permukaan tembus pandang, kilau diagonal, tepi bercahaya, bayangan lembut. Visual mengikuti referensi brand. Yang sudah ada:
 
 **Empat layout**
-- `Hub` (default): klik pill, semua widget muncul sekaligus: Apps launcher, Clipboard, Media + CPU/RAM/baterai, Focus timer, Quick Controls, dan File Shelf. Pill berubah jadi top bar. Klik area kosong atau top bar untuk menutup.
+- `Hub` (default): klik pill, semua widget muncul sekaligus dan memenuhi layar: kolom kiri (Apps launcher, Clipboard), tengah atas (Media + CPU/RAM/baterai), kolom kanan (Focus timer, Quick Controls, File Shelf), dan dock aplikasi di bawah tengah. Bagian tengah layar dibiarkan kosong. Pill berubah jadi top bar. Klik area kosong atau top bar untuk menutup.
 - `Panel`: panel vertikal dengan 7 halaman.
 - `Wide bar`: satu bar panjang berisi artwork, judul/artis, transport, progress, CPU/RAM/baterai, dan jam. Klik bar untuk membuka panel halaman penuh; setelah panel ditutup, bar lebar kembali otomatis.
 - `Cards`: dua kartu mengambang di kanan bawah. Quick Controls berisi volume, brightness, Wi-Fi/BT, Focus, Battery, Record, dan Theme. File Shelf berisi path file yang di-drag, klik untuk membuka, Clear untuk mengosongkan.
