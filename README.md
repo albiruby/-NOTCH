@@ -8,7 +8,7 @@ kompositor Windows, jadi aplikasi hanya menggambar ketika ada yang berubah.
 
 ## Status
 
-v1.8 — Hub memenuhi layar dengan tata letak lega ala referensi. Dynamic island bisa di-drag bebas dan menempel ke tepi/tengah layar. Layout Hub jadi default (klik pill, semua widget muncul). Glassmorphism penuh: permukaan tembus pandang, kilau diagonal, tepi bercahaya, bayangan lembut. Visual mengikuti referensi brand. Yang sudah ada:
+v1.9 — mode iPhone X notch dan Dynamic Island (Pro). Hub memenuhi layar dengan tata letak lega ala referensi. Dynamic island bisa di-drag bebas dan menempel ke tepi/tengah layar. Layout Hub jadi default (klik pill, semua widget muncul). Glassmorphism penuh: permukaan tembus pandang, kilau diagonal, tepi bercahaya, bayangan lembut. Visual mengikuti referensi brand. Yang sudah ada:
 
 **Empat layout**
 - `Hub` (default): klik pill, semua widget muncul sekaligus dan memenuhi layar: kolom kiri (Apps launcher, Clipboard), tengah atas (Media + CPU/RAM/baterai), kolom kanan (Focus timer, Quick Controls, File Shelf), dan dock aplikasi di bawah tengah. Bagian tengah layar dibiarkan kosong. Pill berubah jadi top bar. Klik area kosong atau top bar untuk menutup.
@@ -18,7 +18,7 @@ v1.8 — Hub memenuhi layar dengan tata letak lega ala referensi. Dynamic island
 - Pilih lewat tray → **Layout**.
 
 **Bentuk dan perilaku**
-- Dua gaya: classic notch (menempel di tepi atas) dan dynamic island (pill mengambang)
+- Empat gaya (tray): Classic notch (glass), **iPhone X notch** (hitam pekat, menempel di atas, dengan bahu melengkung ke dalam di kedua sudut), Dynamic island (glass), dan **Dynamic Island (Pro)** (pil hitam pekat seperti iPhone 14 Pro ke atas, dengan lensa kamera di ujung kanan)
 - Dynamic island bisa di-drag ke mana saja. Dilepas dekat tepi kiri/kanan, tengah, atas, atau bawah layar, pill menempel ke sana dengan animasi spring. Posisi tersimpan; tray → **Reset island position** mengembalikan ke atas tengah
 - Hover untuk expand, mouse keluar untuk collapse, animasi spring kritis
 - Klik di luar pill menembus ke aplikasi di bawahnya
@@ -162,6 +162,7 @@ Dibuat otomatis di `%APPDATA%\Notch\`.
 
 | Field | Arti |
 | --- | --- |
+| `mode` | `notch`, `notch_x`, `island` (default), atau `island_pro` |
 | `layout` | `hub` (default), `panel`, `wide`, atau `cards` |
 | `opacity` | Opasitas background (0.2–1.0) |
 | `compact_width` / `compact_height` | Ukuran pill |

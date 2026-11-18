@@ -18,6 +18,25 @@ pub enum SurfaceMode {
     Notch,
     /// Dynamic island: floating pill with a gap from the top edge.
     Island,
+    /// iPhone X style notch: pure black, attached to the top edge, with
+    /// concave "shoulders" where it meets the screen edge.
+    #[serde(rename = "notch_x")]
+    NotchX,
+    /// iPhone 14 Pro style Dynamic Island: a compact pure-black pill with a
+    /// camera lens on its right end. Floats and can be dragged like Island.
+    #[serde(rename = "island_pro")]
+    IslandPro,
+}
+
+impl SurfaceMode {
+    /// Attached to the top edge (square top, rounded bottom).
+    pub fn attached(self) -> bool {
+        matches!(self, SurfaceMode::Notch | SurfaceMode::NotchX)
+    }
+    /// Pure black hardware look instead of glass.
+    pub fn solid(self) -> bool {
+        matches!(self, SurfaceMode::NotchX | SurfaceMode::IslandPro)
+    }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize, Default)]
@@ -63,7 +82,7 @@ impl Metrics {
     pub fn for_layout(settings: &crate::settings::Settings, layout: Layout) -> Self {
         let compact_h = settings.compact_height.max(20.0);
         let mode = settings.mode;
-        let square_top = mode == SurfaceMode::Notch;
+        let square_top = mode.attached();
         let (surface_w, surface_h, expanded_w, expanded_h, expanded_r) =
             if layout == Layout::Wide {
                 // One wide bar: media, transport, metrics, and clock in a row.
@@ -88,9 +107,15 @@ impl Metrics {
         Self {
             surface_w,
             surface_h,
-            compact_w: settings.compact_width.max(120.0),
-            compact_h,
-            compact_r: compact_h * 0.5,
+            // The Pro island is the short, tall pill of recent iPhones; the
+            // iPhone X notch is a little wider and shallower.
+            compact_w: match mode {
+                SurfaceMode::IslandPro => 168.0,
+                SurfaceMode::NotchX => settings.compact_width.clamp(120.0, 220.0),
+                _ => settings.compact_width.max(120.0),
+            },
+            compact_h: if mode == SurfaceMode::IslandPro { compact_h.max(36.0) } else { compact_h },
+            compact_r: if mode == SurfaceMode::IslandPro { compact_h.max(36.0) * 0.5 } else { compact_h * 0.5 },
             expanded_w,
             expanded_h,
             expanded_r,

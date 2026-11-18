@@ -74,6 +74,7 @@ pub struct DrawParams {
     pub edit_text: String,
     pub opacity: f32,
     pub show_clock: bool,
+    pub mode: crate::state::SurfaceMode,
 }
 
 pub struct Renderer {
@@ -407,7 +408,11 @@ impl Renderer {
                 bottom: shape.bottom() * s,
             };
             let radius = shape.r * s;
-            draw_glass(ctx, rect, radius, p.opacity, Glass::Surface, s)?;
+            if p.mode.solid() {
+                draw_hardware(ctx, rect, radius, p.mode, s)?;
+            } else {
+                draw_glass(ctx, rect, radius, p.opacity, Glass::Surface, s)?;
+            }
 
             // Shape coordinates can start above the surface in notch mode, so
             // content is laid out from the visible top edge.
@@ -507,6 +512,9 @@ impl Renderer {
                     draw_logo(ctx, &self.fmt_logo, mark_cx, center_y, mark_r, s, compact_alpha)?;
 
                     let time_w = 54.0;
+                    // The Pro island keeps its camera at the right end, so
+                    // the clock moves in to make room for the lens.
+                    let lens_pad = if p.mode == crate::state::SurfaceMode::IslandPro { 18.0 } else { 0.0 };
                     let time_brush = solid(ctx, &primary)?;
                     time_brush.SetOpacity(compact_alpha);
                     draw_text(
@@ -514,16 +522,19 @@ impl Renderer {
                         &p.time,
                         &self.fmt_pill_time,
                         D2D_RECT_F {
-                            left: (shape.right() - 14.0 - time_w) * s,
+                            left: (shape.right() - 14.0 - lens_pad - time_w) * s,
                             top: visible_top * s,
-                            right: (shape.right() - 14.0) * s,
+                            right: (shape.right() - 14.0 - lens_pad) * s,
                             bottom: shape.bottom() * s,
                         },
                         &time_brush,
                     );
 
                     let mut mid_left = mark_cx + mark_r + 8.0;
-                    let mid_right = shape.right() - 14.0 - time_w - 6.0;
+                    let mid_right = shape.right() - 14.0 - lens_pad - time_w - 6.0;
+                    if lens_pad > 0.0 {
+                        draw_lens(ctx, shape.right() - 17.0, center_y, s, compact_alpha)?;
+                    }
                     if p.media.available && mid_right - mid_left > 40.0 {
                         let art_size = (mark_r * 2.0).min(20.0);
                         if let Some(art) = &self.art_bitmap {
@@ -2789,4 +2800,96 @@ unsafe fn linear(
         endPoint: Vector2 { X: x1, Y: y1 },
     };
     ctx.CreateLinearGradientBrush(&props, None, &collection)
+}
+
+/// Pure black "hardware" surface for the iPhone-style modes. `rect` and
+/// `radius` are in pixels. NotchX adds concave shoulders where the notch
+/// meets the top edge; IslandPro gets a faint rim so it reads on dark
+/// wallpapers the way the real island does under glass.
+unsafe fn draw_hardware(
+    ctx: &ID2D1DeviceContext,
+    rect: D2D_RECT_F,
+    radius: f32,
+    mode: crate::state::SurfaceMode,
+    s: f32,
+) -> Result<()> {
+    use windows::Win32::Graphics::Direct2D::Common::{
+        D2D1_FIGURE_BEGIN_FILLED, D2D1_FIGURE_END_CLOSED, D2D_SIZE_F,
+    };
+    use windows::Win32::Graphics::Direct2D::{
+        D2D1_ARC_SEGMENT, D2D1_ARC_SIZE_SMALL, D2D1_SWEEP_DIRECTION_CLOCKWISE,
+        D2D1_SWEEP_DIRECTION_COUNTER_CLOCKWISE,
+    };
+
+    let black = solid(ctx, &theme::rgb(0x000000, 1.0))?;
+    let rr = D2D1_ROUNDED_RECT {
+        rect,
+        radiusX: radius,
+        radiusY: radius,
+    };
+    ctx.FillRoundedRectangle(&rr, &black);
+
+    if mode == crate::state::SurfaceMode::NotchX {
+        let f = 9.0 * s;
+        let factory = ctx.GetFactory()?;
+        let path = factory.CreatePathGeometry()?;
+        let sink = path.Open()?;
+        let p = |x: f32, y: f32| Vector2 { X: x, Y: y };
+        let arc = |x: f32, y: f32, sweep| D2D1_ARC_SEGMENT {
+            point: p(x, y),
+            size: D2D_SIZE_F { width: f, height: f },
+            rotationAngle: 0.0,
+            sweepDirection: sweep,
+            arcSize: D2D1_ARC_SIZE_SMALL,
+        };
+        let (l, r) = (rect.left, rect.right);
+        // Left shoulder.
+        sink.BeginFigure(p(l - f, 0.0), D2D1_FIGURE_BEGIN_FILLED);
+        sink.AddLine(p(l + 1.0, 0.0));
+        sink.AddLine(p(l + 1.0, f));
+        sink.AddLine(p(l, f));
+        sink.AddArc(&arc(l - f, 0.0, D2D1_SWEEP_DIRECTION_COUNTER_CLOCKWISE));
+        sink.EndFigure(D2D1_FIGURE_END_CLOSED);
+        // Right shoulder.
+        sink.BeginFigure(p(r + f, 0.0), D2D1_FIGURE_BEGIN_FILLED);
+        sink.AddLine(p(r - 1.0, 0.0));
+        sink.AddLine(p(r - 1.0, f));
+        sink.AddLine(p(r, f));
+        sink.AddArc(&arc(r + f, 0.0, D2D1_SWEEP_DIRECTION_CLOCKWISE));
+        sink.EndFigure(D2D1_FIGURE_END_CLOSED);
+        sink.Close()?;
+        ctx.FillGeometry(&path, &black, None);
+    } else {
+        let rim = solid(ctx, &theme::rgb(0xFFFFFF, 0.07))?;
+        let inset = 0.5 * s;
+        ctx.DrawRoundedRectangle(
+            &D2D1_ROUNDED_RECT {
+                rect: D2D_RECT_F {
+                    left: rect.left + inset,
+                    top: rect.top + inset,
+                    right: rect.right - inset,
+                    bottom: rect.bottom - inset,
+                },
+                radiusX: (radius - inset).max(0.0),
+                radiusY: (radius - inset).max(0.0),
+            },
+            &rim,
+            1.0 * s,
+            None,
+        );
+    }
+    Ok(())
+}
+
+/// Front camera lens: dark glass with a deep blue iris and a tiny glint.
+unsafe fn draw_lens(ctx: &ID2D1DeviceContext, cx: f32, cy: f32, s: f32, alpha: f32) -> Result<()> {
+    let ring = solid(ctx, &theme::rgb(0x15161C, alpha))?;
+    ctx.FillEllipse(&circle(cx * s, cy * s, 6.0 * s), &ring);
+    let iris = solid(ctx, &theme::rgb(0x1B2350, alpha))?;
+    ctx.FillEllipse(&circle(cx * s, cy * s, 3.6 * s), &iris);
+    let pupil = solid(ctx, &theme::rgb(0x05060A, alpha))?;
+    ctx.FillEllipse(&circle(cx * s, cy * s, 2.0 * s), &pupil);
+    let glint = solid(ctx, &theme::rgb(0x8FA3FF, 0.55 * alpha))?;
+    ctx.FillEllipse(&circle((cx - 1.4) * s, (cy - 1.4) * s, 0.9 * s), &glint);
+    Ok(())
 }

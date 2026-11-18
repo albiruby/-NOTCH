@@ -30,9 +30,11 @@ pub const CMD_LAYOUT_WIDE: usize = 12;
 pub const CMD_LAYOUT_CARDS: usize = 13;
 pub const CMD_LAYOUT_HUB: usize = 14;
 pub const CMD_RESET_POSITION: usize = 15;
+pub const CMD_MODE_NOTCH_X: usize = 16;
+pub const CMD_MODE_ISLAND_PRO: usize = 17;
 
 pub struct MenuState {
-    pub notch: bool,
+    pub mode: crate::state::SurfaceMode,
     pub autostart: bool,
     pub opacity: f32,
     pub hide_on_fullscreen: bool,
@@ -89,18 +91,18 @@ pub fn show_menu(owner: HWND, state: &MenuState) -> Result<()> {
     unsafe {
         let menu = CreatePopupMenu()?;
         AppendMenuW(menu, MF_STRING, CMD_TOGGLE, w!("Show / hide notch"))?;
-        let notch_flags = if state.notch {
-            MF_STRING | MF_CHECKED
-        } else {
-            MF_STRING
+        use crate::state::SurfaceMode;
+        let check = |mode: SurfaceMode| {
+            if state.mode == mode {
+                MF_STRING | MF_CHECKED
+            } else {
+                MF_STRING
+            }
         };
-        let island_flags = if state.notch {
-            MF_STRING
-        } else {
-            MF_STRING | MF_CHECKED
-        };
-        AppendMenuW(menu, notch_flags, CMD_MODE_NOTCH, w!("Classic notch"))?;
-        AppendMenuW(menu, island_flags, CMD_MODE_ISLAND, w!("Dynamic island"))?;
+        AppendMenuW(menu, check(SurfaceMode::Notch), CMD_MODE_NOTCH, w!("Classic notch (glass)"))?;
+        AppendMenuW(menu, check(SurfaceMode::NotchX), CMD_MODE_NOTCH_X, w!("iPhone X notch"))?;
+        AppendMenuW(menu, check(SurfaceMode::Island), CMD_MODE_ISLAND, w!("Dynamic island (glass)"))?;
+        AppendMenuW(menu, check(SurfaceMode::IslandPro), CMD_MODE_ISLAND_PRO, w!("Dynamic Island (Pro)"))?;
         AppendMenuW(menu, MF_STRING, CMD_RESET_POSITION, w!("Reset island position"))?;
 
         let layout_menu = CreatePopupMenu()?;

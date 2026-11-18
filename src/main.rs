@@ -197,6 +197,7 @@ impl App {
             edit_text: self.edit_text.clone(),
             opacity: self.settings.opacity.clamp(0.2, 1.0),
             show_clock: self.settings.show_clock,
+            mode: self.settings.mode,
         };
         if let Err(err) = self.renderer.draw_frame(&params) {
             eprintln!("draw failed: {err}");
@@ -298,7 +299,7 @@ impl App {
     /// The island can be dragged and snapped; the classic notch and the
     /// Cards layout stay where they are.
     fn island_free(&self) -> bool {
-        self.settings.mode == SurfaceMode::Island && self.layout != Layout::Cards
+        !self.settings.mode.attached() && self.layout != Layout::Cards
     }
 
     /// Pill centre offset from the window's top-left, in pixels.
@@ -1733,12 +1734,12 @@ unsafe extern "system" fn menu_wndproc(
             let event = (lparam.0 as u16 as i16) as i32;
             if event == WM_RBUTTONUP as i32 || event == WM_CONTEXTMENU as i32 {
                 let notch = app(HWND(NOTCH_HWND.load(Ordering::Relaxed) as *mut core::ffi::c_void))
-                    .map(|app| app.settings.mode == SurfaceMode::Notch)
-                    .unwrap_or(false);
+                    .map(|app| app.settings.mode)
+                    .unwrap_or(SurfaceMode::Island);
                 let menu_state = {
                     let app = app(HWND(NOTCH_HWND.load(Ordering::Relaxed) as *mut core::ffi::c_void));
                     tray::MenuState {
-                        notch,
+                        mode: notch,
                         autostart: tray::autostart_enabled(),
                         opacity: app
                             .as_ref()
@@ -1776,6 +1777,16 @@ unsafe extern "system" fn menu_wndproc(
                 tray::CMD_MODE_NOTCH => {
                     if let Some(app) = app(HWND(NOTCH_HWND.load(Ordering::Relaxed) as *mut core::ffi::c_void)) {
                         app.set_mode(SurfaceMode::Notch);
+                    }
+                }
+                tray::CMD_MODE_NOTCH_X => {
+                    if let Some(app) = app(HWND(NOTCH_HWND.load(Ordering::Relaxed) as *mut core::ffi::c_void)) {
+                        app.set_mode(SurfaceMode::NotchX);
+                    }
+                }
+                tray::CMD_MODE_ISLAND_PRO => {
+                    if let Some(app) = app(HWND(NOTCH_HWND.load(Ordering::Relaxed) as *mut core::ffi::c_void)) {
+                        app.set_mode(SurfaceMode::IslandPro);
                     }
                 }
                 tray::CMD_MODE_ISLAND => {
