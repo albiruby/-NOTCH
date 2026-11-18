@@ -77,6 +77,10 @@ v1.13 — AI Developer Cockpit di Hub. v1.12: indikator privasi kamera/mikrofon 
 - Key disimpan di **Windows Credential Manager** (`NOTCH/ai/<provider>`), tidak pernah di `settings.json`. Data diperbarui tiap 15 menit dan saat Hub dibuka jika lebih dari 5 menit
 - Catatan: data biaya Claude biasanya tertunda sekitar 4 jam (maks. 24 jam)
 
+**Cuaca & jaringan** (kartu media Hub)
+- Cuaca saat ini dari `wttr.in` (tanpa API key, lokasi deteksi via IP), diperbarui tiap 30 menit
+- Throughput jaringan download/upload di bawah jam
+
 **Produktivitas**
 - Focus timer Pomodoro 25 menit, klik untuk start/pause, reset
 - Tasks dengan input keyboard langsung di panel, tersimpan di `tasks.json`
@@ -233,6 +237,7 @@ src/
 ├─ tasks.rs      tasks + water, JSON
 ├─ shelf.rs      file shelf, JSON
 ├─ ai.rs        AI cockpit: worker, provider fetch, CLI key/budget
+├─ weather.rs   cuaca dari wttr.in
 ├─ sessions.rs  deteksi sesi AI aktif (proses + judul jendela)
 ├─ ai_report.rs parsing respons + tanggal (murni, ada unit test)
 ├─ http.rs      HTTPS GET via WinHTTP

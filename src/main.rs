@@ -22,6 +22,7 @@ mod sysmon;
 mod tasks;
 mod theme;
 mod tray;
+mod weather;
 mod window;
 
 use std::sync::atomic::{AtomicIsize, Ordering};
@@ -218,6 +219,7 @@ impl App {
             privacy: self.privacy.clone(),
             activities: self.activities.items.clone(),
             ai: ai::snapshot(),
+            weather: weather::snapshot(),
             editing: self.editing,
             edit_text: self.edit_text.clone(),
             opacity: self.settings.opacity.clamp(0.2, 1.0),
@@ -995,6 +997,7 @@ unsafe extern "system" fn notch_wndproc(
             clipboard::start(hwnd);
             lyrics::start(hwnd);
             ai::start(hwnd);
+            weather::start(hwnd);
             unsafe {
                 DragAcceptFiles(hwnd, true);
             }
@@ -1248,7 +1251,7 @@ unsafe extern "system" fn notch_wndproc(
             }
             LRESULT(0)
         }
-        ai::WM_APP_AI => {
+        ai::WM_APP_AI | weather::WM_APP_WEATHER => {
             if let Some(app) = app(hwnd) {
                 app.draw();
             }

@@ -81,6 +81,7 @@ pub struct DrawParams {
     pub privacy: crate::privacy::Privacy,
     pub activities: Vec<crate::activity::Activity>,
     pub ai: crate::ai::Snapshot,
+    pub weather: crate::weather::Weather,
 }
 
 pub struct Renderer {
@@ -2947,6 +2948,27 @@ impl Renderer {
                 scaled_rect(m.x + 326.0, m.y + 138.0, 124.0, 24.0, s),
                 &primary,
             );
+            // Weather, under the transport on the left of the media card.
+            if p.weather.ok {
+                let wx = m.x + 20.0;
+                let wy = m.y + 158.0;
+                let icon = solid(ctx, &theme::rgb(theme::accent::c400(), 1.0))?;
+                draw_text(
+                    ctx,
+                    p.weather.glyph(),
+                    &self.fmt_icon_sm,
+                    scaled_rect(wx, wy, 18.0, 16.0, s),
+                    &icon,
+                );
+                draw_text(
+                    ctx,
+                    &p.weather.line(),
+                    &self.fmt_small,
+                    scaled_rect(wx + 22.0, wy, 270.0, 16.0, s),
+                    &secondary,
+                );
+            }
+
             // Network throughput, under the clock.
             let net = format!(
                 "\u{2193} {}   \u{2191} {}",
