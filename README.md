@@ -8,7 +8,7 @@ kompositor Windows, jadi aplikasi hanya menggambar ketika ada yang berubah.
 
 ## Status
 
-v1.10 — pilihan theme di tray: Violet, Aurora Mint (fresh), Sunset Coral. Mode iPhone X notch dan Dynamic Island (Pro). Hub memenuhi layar dengan tata letak lega ala referensi. Dynamic island bisa di-drag bebas dan menempel ke tepi/tengah layar. Layout Hub jadi default (klik pill, semua widget muncul). Glassmorphism penuh: permukaan tembus pandang, kilau diagonal, tepi bercahaya, bayangan lembut. Visual mengikuti referensi brand. Yang sudah ada:
+v1.11 — kaca hampir bening; theme (Violet, Aurora Mint, Sunset Coral) mengubah seluruh tampilan: rona kaca, teks, track, tile, dan tepi. Mode iPhone X notch dan Dynamic Island (Pro). Hub memenuhi layar dengan tata letak lega ala referensi. Dynamic island bisa di-drag bebas dan menempel ke tepi/tengah layar. Layout Hub jadi default (klik pill, semua widget muncul). Glassmorphism penuh: permukaan tembus pandang, kilau diagonal, tepi bercahaya, bayangan lembut. Visual mengikuti referensi brand. Yang sudah ada:
 
 **Empat layout**
 - `Hub` (default): klik pill, semua widget muncul sekaligus dan memenuhi layar: kolom kiri (Apps launcher, Clipboard), tengah atas (Media + CPU/RAM/baterai), kolom kanan (Focus timer, Quick Controls, File Shelf), dan dock aplikasi di bawah tengah. Bagian tengah layar dibiarkan kosong. Pill berubah jadi top bar. Klik area kosong atau top bar untuk menutup.

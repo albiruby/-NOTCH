@@ -85,13 +85,15 @@ pub mod glass {
         pub shadow: f32,
     }
 
+    /// Near-clear glass: a light tinted veil, with the sheen and rim doing
+    /// the work of separating the surface from the wallpaper.
     pub const GLASS: Recipe = Recipe {
-        body_top: 0.58,
-        body_bottom: 0.70,
-        tile_fill: 0.06,
-        sheen: 0.12,
-        rim: 0.30,
-        shadow: 0.22,
+        body_top: 0.16,
+        body_bottom: 0.26,
+        tile_fill: 0.07,
+        sheen: 0.16,
+        rim: 0.42,
+        shadow: 0.16,
     };
 }
 
@@ -170,6 +172,15 @@ pub mod accent {
         c900: u32,
         base: u32,
         battery: u32,
+        /// Glass body hue.
+        tint: u32,
+        /// Light used for sheen, rims, tiles and hairlines.
+        light: u32,
+        text1: u32,
+        text2: u32,
+        muted: u32,
+        disabled: u32,
+        track: u32,
     }
 
     const VIOLET: Palette = Palette {
@@ -182,6 +193,13 @@ pub mod accent {
         c900: 0x292440,
         base: 0x090A0D,
         battery: super::color::SUCCESS,
+        tint: 0x2A2450,
+        light: 0xFFFFFF,
+        text1: 0xF2F0FF,
+        text2: 0xB8B2D8,
+        muted: 0x837CA6,
+        disabled: 0x4E4870,
+        track: 0x2A2645,
     };
     const MINT: Palette = Palette {
         c300: 0xCCFBF1,
@@ -191,8 +209,15 @@ pub mod accent {
         c700: 0x14B8A6,
         c800: 0x1F6F6A,
         c900: 0x123038,
-        base: 0x0B1418,
+        base: 0x06171A,
         battery: super::color::INFO,
+        tint: 0x0F4A48,
+        light: 0xE6FFFA,
+        text1: 0xEFFFFB,
+        text2: 0xA9DCD3,
+        muted: 0x6FA39B,
+        disabled: 0x3D625E,
+        track: 0x1C3D3F,
     };
     const CORAL: Palette = Palette {
         c300: 0xFFE4D6,
@@ -202,8 +227,15 @@ pub mod accent {
         c700: 0xE65A70,
         c800: 0x8A3A52,
         c900: 0x2E1A2C,
-        base: 0x120A12,
+        base: 0x1A0A12,
         battery: super::color::SUCCESS,
+        tint: 0x55203A,
+        light: 0xFFF1EA,
+        text1: 0xFFF4EF,
+        text2: 0xEDBFB2,
+        muted: 0xB0807B,
+        disabled: 0x6E4650,
+        track: 0x40222F,
     };
 
     static CURRENT: AtomicU8 = AtomicU8::new(0);
@@ -231,4 +263,11 @@ pub mod accent {
     pub fn base() -> u32 { p().base }
     /// Battery ring colour (kept distinct from the accent).
     pub fn battery() -> u32 { p().battery }
+    pub fn tint() -> u32 { p().tint }
+    pub fn light() -> u32 { p().light }
+    pub fn text1() -> u32 { p().text1 }
+    pub fn text2() -> u32 { p().text2 }
+    pub fn muted() -> u32 { p().muted }
+    pub fn disabled() -> u32 { p().disabled }
+    pub fn track() -> u32 { p().track }
 }

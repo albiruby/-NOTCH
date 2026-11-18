@@ -396,10 +396,10 @@ impl Renderer {
             }
 
             let border = theme::rgb(theme::accent::c800(), 0.30 * p.opacity);
-            let primary = theme::rgb(theme::color::TEXT_PRIMARY, 1.0);
-            let secondary = theme::rgb(theme::color::TEXT_SECONDARY, 1.0);
+            let primary = theme::rgb(theme::accent::text1(), 1.0);
+            let secondary = theme::rgb(theme::accent::text2(), 1.0);
             let accent = theme::rgb(theme::accent::c600(), 1.0);
-            let track = theme::rgb(theme::color::BG_ELEVATED, 1.0);
+            let track = theme::rgb(theme::accent::track(), 1.0);
 
             let rect = D2D_RECT_F {
                 left: shape.x * s,
@@ -1774,7 +1774,7 @@ impl Renderer {
                     draw_text(ctx, "NOTCH", &self.fmt_pill_title, scaled_rect(left, cy - 8.0, 170.0, 16.0, s), &title);
                 }
 
-                let line = solid(ctx, &theme::rgb(0xFFFFFF, 0.10 * panel_alpha))?;
+                let line = solid(ctx, &theme::rgb(theme::accent::light(), 0.10 * panel_alpha))?;
                 let sys_x = x + 262.0;
                 ctx.FillRectangle(&scaled_rect(sys_x - 12.0, cy - 13.0, 1.0, 26.0, s), &line);
                 for (index, (label, value)) in [("CPU", p.cpu), ("RAM", p.ram)].iter().enumerate() {
@@ -1785,9 +1785,9 @@ impl Renderer {
                 ctx.FillRectangle(&scaled_rect(sys_x + 98.0, cy - 13.0, 1.0, 26.0, s), &line);
                 let on = |state: Option<bool>| -> Result<ID2D1SolidColorBrush> {
                     let color = if state == Some(true) {
-                        theme::rgb(theme::color::TEXT_PRIMARY, panel_alpha)
+                        theme::rgb(theme::accent::text1(), panel_alpha)
                     } else {
-                        theme::rgb(theme::color::TEXT_DISABLED, panel_alpha)
+                        theme::rgb(theme::accent::disabled(), panel_alpha)
                     };
                     solid(ctx, &color)
                 };
@@ -1815,8 +1815,8 @@ impl Renderer {
         let hits = crate::state::card_hits();
         unsafe {
             let ctx = &self.ctx;
-            let primary = solid(ctx, &theme::rgb(theme::color::TEXT_PRIMARY, 1.0))?;
-            let secondary = solid(ctx, &theme::rgb(theme::color::TEXT_SECONDARY, 1.0))?;
+            let primary = solid(ctx, &theme::rgb(theme::accent::text1(), 1.0))?;
+            let secondary = solid(ctx, &theme::rgb(theme::accent::text2(), 1.0))?;
             let accent = solid(ctx, &theme::rgb(theme::accent::c600(), 1.0))?;
             let border_color = theme::rgb(theme::accent::c800(), 0.32 * p.opacity);
 
@@ -1877,7 +1877,7 @@ impl Renderer {
                 draw_text(ctx, name, &self.fmt_pill_title, scaled_rect(tx + 34.0, 46.0, 80.0, 30.0, s), &primary);
                 let state_brush = solid(
                     ctx,
-                    &theme::rgb(if on { theme::accent::c400() } else { theme::color::TEXT_MUTED }, 1.0),
+                    &theme::rgb(if on { theme::accent::c400() } else { theme::accent::muted() }, 1.0),
                 )?;
                 draw_text(ctx, state, &self.fmt_small, scaled_rect(tx + 108.0, 46.0, 64.0, 30.0, s), &state_brush);
             }
@@ -1971,7 +1971,7 @@ impl Renderer {
             let folder = solid(ctx, &theme::rgb(theme::color::WARNING, 1.0))?;
             draw_text(ctx, "\u{E8B7}", &self.fmt_icon_sm, scaled_rect(pad, 366.0, 16.0, 20.0, s), &folder);
             draw_text(ctx, "File Shelf", &self.fmt_card_title, scaled_rect(pad + 22.0, 366.0, 220.0, 20.0, s), &primary);
-            let clear_brush = solid(ctx, &theme::rgb(theme::color::TEXT_MUTED, 1.0))?;
+            let clear_brush = solid(ctx, &theme::rgb(theme::accent::muted(), 1.0))?;
             draw_text(
                 ctx,
                 "CLEAR",
@@ -1981,7 +1981,7 @@ impl Renderer {
             );
 
             if p.shelf_paths.is_empty() {
-                let empty = solid(ctx, &theme::rgb(theme::color::TEXT_MUTED, 1.0))?;
+                let empty = solid(ctx, &theme::rgb(theme::accent::muted(), 1.0))?;
                 draw_text(
                     ctx,
                     "Drag files here.",
@@ -2075,9 +2075,9 @@ impl Renderer {
                 )?;
             }
 
-            let primary = solid(ctx, &theme::rgb(theme::color::TEXT_PRIMARY, 1.0))?;
-            let secondary = solid(ctx, &theme::rgb(theme::color::TEXT_SECONDARY, 1.0))?;
-            let muted = solid(ctx, &theme::rgb(theme::color::TEXT_MUTED, 1.0))?;
+            let primary = solid(ctx, &theme::rgb(theme::accent::text1(), 1.0))?;
+            let secondary = solid(ctx, &theme::rgb(theme::accent::text2(), 1.0))?;
+            let muted = solid(ctx, &theme::rgb(theme::accent::muted(), 1.0))?;
             let accent = solid(ctx, &theme::rgb(theme::accent::c500(), 1.0))?;
 
             // Launcher.
@@ -2158,7 +2158,7 @@ impl Renderer {
                 scaled_rect(bar.x, bar.y + 20.0, bar.w, 16.0, s),
                 &muted,
             );
-            let divider = solid(ctx, &theme::rgb(0xFFFFFF, 0.08))?;
+            let divider = solid(ctx, &theme::rgb(theme::accent::light(), 0.08))?;
             ctx.FillRectangle(&scaled_rect(m.x + 312.0, m.y + 20.0, 1.0, m.h - 40.0, s), &divider);
             let battery = p.battery.map(|b| b as f32).unwrap_or(0.0);
             let rings = [
@@ -2551,7 +2551,7 @@ unsafe fn draw_rounded_art(
         radiusY: radius,
     };
     ctx.FillRoundedRectangle(&rr, &brush);
-    let rim = solid(ctx, &theme::rgb(0xFFFFFF, 0.10 * alpha))?;
+    let rim = solid(ctx, &theme::rgb(theme::accent::light(), 0.10 * alpha))?;
     ctx.DrawRoundedRectangle(&rr, &rim, 1.0, None);
     Ok(())
 }
@@ -2569,7 +2569,7 @@ unsafe fn draw_ring(
     s: f32,
     alpha: f32,
 ) -> Result<()> {
-    let track = solid(ctx, &theme::rgb(theme::color::GRAPHITE_700, alpha))?;
+    let track = solid(ctx, &theme::rgb(theme::accent::track(), alpha))?;
     ctx.DrawEllipse(&circle(cx * s, cy * s, r * s), &track, thickness * s, None);
     let ratio = ratio.clamp(0.0, 1.0);
     if ratio <= 0.005 {
@@ -2609,7 +2609,7 @@ unsafe fn draw_slider(
     alpha: f32,
 ) -> Result<()> {
     let h = 4.0;
-    let track = solid(ctx, &theme::rgb(theme::color::GRAPHITE_700, alpha))?;
+    let track = solid(ctx, &theme::rgb(theme::accent::track(), alpha))?;
     ctx.FillRoundedRectangle(
         &D2D1_ROUNDED_RECT {
             rect: scaled_rect(x, y, w, h, s),
@@ -2660,13 +2660,13 @@ unsafe fn draw_icon_badge(
         let fill = violet_gradient(ctx, &rect, alpha)?;
         ctx.FillEllipse(&circle(cx * s, cy * s, r * s), &fill);
     } else {
-        let fill = solid(ctx, &theme::rgb(theme::color::GRAPHITE_700, alpha))?;
+        let fill = solid(ctx, &theme::rgb(theme::accent::track(), alpha))?;
         ctx.FillEllipse(&circle(cx * s, cy * s, r * s), &fill);
     }
     let color = if active {
         theme::rgb(0xFFFFFF, alpha)
     } else {
-        theme::rgb(theme::color::TEXT_SECONDARY, alpha)
+        theme::rgb(theme::accent::text2(), alpha)
     };
     let brush = solid(ctx, &color)?;
     draw_text(ctx, glyph, fmt, rect, &brush);
@@ -2722,12 +2722,12 @@ unsafe fn draw_glass(
 
     let (top, bottom) = if kind == Glass::Tile {
         (
-            theme::rgb(0xFFFFFF, g.tile_fill * 1.4 * opacity),
-            theme::rgb(0xFFFFFF, g.tile_fill * 0.6 * opacity),
+            theme::rgb(theme::accent::light(), g.tile_fill * 1.4 * opacity),
+            theme::rgb(theme::accent::light(), g.tile_fill * 0.6 * opacity),
         )
     } else {
         (
-            theme::rgb(theme::accent::c900(), g.body_top * opacity),
+            theme::rgb(theme::accent::tint(), g.body_top * opacity),
             theme::rgb(theme::accent::base(), g.body_bottom * opacity),
         )
     };
@@ -2743,9 +2743,9 @@ unsafe fn draw_glass(
         rect.left + (rect.right - rect.left) * 0.55,
         rect.bottom,
         &[
-            (0.0, theme::rgb(0xFFFFFF, sheen_a * opacity)),
-            (0.45, theme::rgb(0xFFFFFF, sheen_a * 0.25 * opacity)),
-            (1.0, theme::rgb(0xFFFFFF, 0.0)),
+            (0.0, theme::rgb(theme::accent::light(), sheen_a * opacity)),
+            (0.45, theme::rgb(theme::accent::light(), sheen_a * 0.25 * opacity)),
+            (1.0, theme::rgb(theme::accent::light(), 0.0)),
         ],
     )?;
     ctx.FillRoundedRectangle(&rr(rect, radius), &sheen);
@@ -2759,9 +2759,9 @@ unsafe fn draw_glass(
         rect.left,
         rect.bottom,
         &[
-            (0.0, theme::rgb(0xFFFFFF, rim_a * opacity)),
+            (0.0, theme::rgb(theme::accent::light(), rim_a * opacity)),
             (0.5, theme::rgb(theme::accent::c500(), rim_a * 0.55 * opacity)),
-            (1.0, theme::rgb(0xFFFFFF, rim_a * 0.2 * opacity)),
+            (1.0, theme::rgb(theme::accent::light(), rim_a * 0.2 * opacity)),
         ],
     )?;
     let inset = 0.5 * s;
