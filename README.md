@@ -57,6 +57,11 @@ v1.13 — AI Developer Cockpit di Hub. v1.12: indikator privasi kamera/mikrofon 
 - Pill menampilkan aktivitas terbaru (ikon status, judul, persen, garis progres). Hub menampilkan sampai 3 aktivitas di kartu **Live Activities** di bawah kartu media
 - Aktivitas dengan judul yang sama diperbarui, bukan ditambah. Yang selesai/gagal hilang setelah 6 detik
 
+**Deteksi sesi AI aktif** (di kartu cockpit)
+- Baris "Active now" menampilkan aplikasi AI yang sedang terbuka: Claude, ChatGPT, Gemini, DeepSeek, Copilot, Cursor, Perplexity, lewat nama proses dan judul tab browser
+- Hanya membaca yang sudah terlihat sistem (daftar proses, judul jendela). Tidak menyentuh akun, cookie, token, atau isi percakapan aplikasi lain
+- Berjalan tanpa API key sama sekali
+
 **AI Developer Cockpit** (Hub, kanan atas)
 - Biaya bulan berjalan dan token per penyedia: **Claude** (Usage and Cost Analytics API), **OpenAI** (Costs and Usage API organisasi), dan saldo **DeepSeek**
 - Bar anggaran bulanan, sisa hari di bulan ini, dan grafik biaya harian
@@ -228,6 +233,7 @@ src/
 ├─ tasks.rs      tasks + water, JSON
 ├─ shelf.rs      file shelf, JSON
 ├─ ai.rs        AI cockpit: worker, provider fetch, CLI key/budget
+├─ sessions.rs  deteksi sesi AI aktif (proses + judul jendela)
 ├─ ai_report.rs parsing respons + tanggal (murni, ada unit test)
 ├─ http.rs      HTTPS GET via WinHTTP
 ├─ secrets.rs   Windows Credential Manager

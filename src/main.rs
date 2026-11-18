@@ -14,6 +14,7 @@ mod netstatus;
 mod privacy;
 mod renderer;
 mod secrets;
+mod sessions;
 mod settings;
 mod shelf;
 mod state;

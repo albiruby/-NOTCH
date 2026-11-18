@@ -30,6 +30,8 @@ pub struct Snapshot {
     /// Monthly budget in USD; 0 = none.
     pub budget: f64,
     pub updated: Option<Instant>,
+    /// AI tools detected open right now (desktop apps + browser tabs).
+    pub active_sessions: Vec<String>,
 }
 
 impl Snapshot {
@@ -81,6 +83,7 @@ fn slot() -> &'static Mutex<Snapshot> {
             month: Month::at(now_unix()),
             budget: load_budget(),
             updated: None,
+            active_sessions: crate::sessions::active(),
         })
     })
 }
@@ -93,17 +96,23 @@ pub fn start(hwnd: HWND) {
     let handle = thread::Builder::new()
         .name("notch-ai".into())
         .spawn(|| loop {
-            // Nothing to fetch without a key; just sleep until asked.
-            if Provider::ALL
+            let has_keys = Provider::ALL
                 .iter()
-                .any(|p| crate::secrets::load(p.key()).is_some())
-            {
+                .any(|p| crate::secrets::load(p.key()).is_some());
+            if has_keys {
                 let next = fetch_all();
                 if let Ok(mut guard) = slot().lock() {
                     *guard = next;
                 }
-                notify();
+            } else {
+                // No keys: still refresh the lightweight "active now" line.
+                let sessions = crate::sessions::active();
+                if let Ok(mut guard) = slot().lock() {
+                    guard.active_sessions = sessions;
+                    guard.month = Month::at(now_unix());
+                }
             }
+            notify();
             thread::park_timeout(INTERVAL);
         });
     if let Ok(handle) = handle {
@@ -175,6 +184,7 @@ fn fetch_all() -> Snapshot {
         month,
         budget: load_budget(),
         updated: Some(Instant::now()),
+        active_sessions: crate::sessions::active(),
     }
 }
 

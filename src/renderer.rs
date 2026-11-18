@@ -2353,6 +2353,41 @@ impl Renderer {
         Ok(())
     }
 
+    /// "Active now" strip: a green dot and the AI tools currently open.
+    unsafe fn draw_active_line(
+        &self,
+        ctx: &ID2D1DeviceContext,
+        ai: &crate::ai::Snapshot,
+        x: f32,
+        y: f32,
+        w: f32,
+        s: f32,
+    ) -> Result<()> {
+        let muted = solid(ctx, &theme::rgb(theme::accent::muted(), 1.0))?;
+        if ai.active_sessions.is_empty() {
+            draw_text(
+                ctx,
+                "No AI sessions open",
+                &self.fmt_small,
+                scaled_rect(x, y, w, 16.0, s),
+                &muted,
+            );
+            return Ok(());
+        }
+        let dot = solid(ctx, &theme::rgb(theme::color::SUCCESS, 1.0))?;
+        ctx.FillEllipse(&circle((x + 4.0) * s, (y + 8.0) * s, 3.0 * s), &dot);
+        let text = solid(ctx, &theme::rgb(theme::accent::text2(), 1.0))?;
+        let label = format!("Active now  ·  {}", ai.active_sessions.join("  ·  "));
+        draw_text(
+            ctx,
+            &label,
+            &self.fmt_small,
+            scaled_rect(x + 14.0, y, w - 14.0, 16.0, s),
+            &text,
+        );
+        Ok(())
+    }
+
     /// AI Developer Cockpit card: per-provider month-to-date spend, budget
     /// bar and a daily spend sparkline.
     fn draw_ai_card(&self, p: &DrawParams, card: crate::state::Rect, s: f32) -> Result<()> {
@@ -2424,9 +2459,10 @@ impl Renderer {
                     ctx,
                     "Keys stay in Windows Credential Manager.",
                     &self.fmt_small,
-                    scaled_rect(x + 20.0, y + 168.0, card.w - 40.0, 16.0, s),
+                    scaled_rect(x + 20.0, y + 166.0, card.w - 40.0, 16.0, s),
                     &muted,
                 );
+                self.draw_active_line(ctx, ai, x + 20.0, y + 188.0, card.w - 40.0, s)?;
                 return Ok(());
             }
 
@@ -2548,14 +2584,17 @@ impl Renderer {
                 &muted,
             );
 
+            // "Active now" line (open AI tools) above the sparkline.
+            self.draw_active_line(ctx, ai, x + 20.0, y + 150.0, card.w - 40.0, s)?;
+
             // Daily spend sparkline.
             draw_sparkline(
                 ctx,
                 &ai.daily(),
                 x + 20.0,
-                y + 152.0,
+                y + 168.0,
                 card.w - 40.0,
-                44.0,
+                30.0,
                 s,
             )?;
         }
