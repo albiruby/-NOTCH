@@ -46,7 +46,11 @@ pub fn get(host: &str, path: &str, headers: &[(&str, &str)]) -> Option<(u32, Str
 
         let mut status = 0u32;
         let mut body = Vec::new();
-        let headers_arg = if header_w.is_empty() { None } else { Some(header_w.as_slice()) };
+        let headers_arg = if header_w.is_empty() {
+            None
+        } else {
+            Some(header_w.as_slice())
+        };
         let ok = WinHttpSendRequest(request, headers_arg, None, 0, 0, 0).is_ok()
             && WinHttpReceiveResponse(request, std::ptr::null_mut()).is_ok();
         if ok {

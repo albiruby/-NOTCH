@@ -72,7 +72,11 @@ impl Store {
                         item.detail = detail;
                     }
                     if progress.is_some() || state != Status::Running {
-                        item.progress = if state == Status::Done { Some(1.0) } else { progress.or(item.progress) };
+                        item.progress = if state == Status::Done {
+                            Some(1.0)
+                        } else {
+                            progress.or(item.progress)
+                        };
                     }
                     item.status = state;
                     item.updated = Instant::now();
@@ -82,7 +86,11 @@ impl Store {
                         Activity {
                             title,
                             detail,
-                            progress: if state == Status::Done { Some(1.0) } else { progress },
+                            progress: if state == Status::Done {
+                                Some(1.0)
+                            } else {
+                                progress
+                            },
                             status: state,
                             updated: Instant::now(),
                         },
@@ -164,7 +172,15 @@ mod tests {
 
     #[test]
     fn parses_push() {
-        let req = parse(&args(&["push", "Build", "--progress", "40", "--detail", "cargo"])).unwrap();
+        let req = parse(&args(&[
+            "push",
+            "Build",
+            "--progress",
+            "40",
+            "--detail",
+            "cargo",
+        ]))
+        .unwrap();
         assert_eq!(
             req,
             Request::Push {
@@ -175,7 +191,13 @@ mod tests {
             }
         );
         let req = parse(&args(&["push", "Build", "--done"])).unwrap();
-        assert!(matches!(req, Request::Push { state: Status::Done, .. }));
+        assert!(matches!(
+            req,
+            Request::Push {
+                state: Status::Done,
+                ..
+            }
+        ));
         assert!(parse(&args(&["push"])).is_none());
         assert!(parse(&args(&["--expanded"])).is_none());
     }

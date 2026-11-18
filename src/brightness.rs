@@ -19,7 +19,8 @@ impl Brightness {
         unsafe {
             let hmonitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
             let mut count = 0;
-            if GetNumberOfPhysicalMonitorsFromHMONITOR(hmonitor, &mut count).is_err() || count == 0 {
+            if GetNumberOfPhysicalMonitorsFromHMONITOR(hmonitor, &mut count).is_err() || count == 0
+            {
                 return None;
             }
             let mut physical = vec![PHYSICAL_MONITOR::default(); count as usize];

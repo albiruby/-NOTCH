@@ -68,7 +68,15 @@ pub fn civil(days: i64) -> (i64, u32, u32) {
     let mp = (5 * doy + 2) / 153;
     let d = (doy - (153 * mp + 2) / 5 + 1) as u32;
     let m = if mp < 10 { mp + 3 } else { mp - 9 } as u32;
-    (if m <= 2 { yoe + era * 400 + 1 } else { yoe + era * 400 }, m, d)
+    (
+        if m <= 2 {
+            yoe + era * 400 + 1
+        } else {
+            yoe + era * 400
+        },
+        m,
+        d,
+    )
 }
 
 /// (year, month, day) -> days since 1970-01-01.
@@ -148,10 +156,18 @@ pub fn anthropic_cost(body: &str, month: &Month) -> Option<Vec<f64>> {
     let value: Value = serde_json::from_str(body).ok()?;
     let mut daily = vec![0.0; month.today as usize];
     for row in value.get("data")?.as_array()? {
-        let Some(day) = row.get("starting_at").and_then(Value::as_str).and_then(|s| day_of(s, month)) else {
+        let Some(day) = row
+            .get("starting_at")
+            .and_then(Value::as_str)
+            .and_then(|s| day_of(s, month))
+        else {
             continue;
         };
-        let cents = row.get("cost").and_then(|c| c.get("amount")).and_then(number).unwrap_or(0.0);
+        let cents = row
+            .get("cost")
+            .and_then(|c| c.get("amount"))
+            .and_then(number)
+            .unwrap_or(0.0);
         if let Some(slot) = daily.get_mut(day - 1) {
             *slot += cents / 100.0;
         }
@@ -179,7 +195,10 @@ pub fn openai_cost(body: &str, month: &Month) -> Option<Vec<f64>> {
     let value: Value = serde_json::from_str(body).ok()?;
     let mut daily = vec![0.0; month.today as usize];
     for bucket in value.get("data")?.as_array()? {
-        let start = bucket.get("start_time").and_then(Value::as_i64).unwrap_or(0);
+        let start = bucket
+            .get("start_time")
+            .and_then(Value::as_i64)
+            .unwrap_or(0);
         let index = (start - month.start_unix).div_euclid(86_400);
         if index < 0 {
             continue;
@@ -206,7 +225,12 @@ pub fn openai_tokens(body: &str) -> Option<u64> {
     let value: Value = serde_json::from_str(body).ok()?;
     let mut total = 0u64;
     for bucket in value.get("data")?.as_array()? {
-        for r in bucket.get("results").and_then(Value::as_array).into_iter().flatten() {
+        for r in bucket
+            .get("results")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+        {
             total += r.get("input_tokens").and_then(Value::as_u64).unwrap_or(0);
             total += r.get("output_tokens").and_then(Value::as_u64).unwrap_or(0);
         }
@@ -220,7 +244,10 @@ pub fn deepseek_balance(body: &str) -> Option<String> {
     let value: Value = serde_json::from_str(body).ok()?;
     let info = value.get("balance_infos")?.as_array()?.first()?;
     let amount = info.get("total_balance").and_then(number)?;
-    let currency = info.get("currency").and_then(Value::as_str).unwrap_or("USD");
+    let currency = info
+        .get("currency")
+        .and_then(Value::as_str)
+        .unwrap_or("USD");
     Some(match currency {
         "USD" => format!("${amount:.2}"),
         "CNY" => format!("¥{amount:.2}"),
@@ -298,7 +325,8 @@ mod tests {
             u = s + 2 * 86_400
         );
         assert_eq!(openai_cost(&body, &m).unwrap(), vec![3.75, 1.0]);
-        let usage = r#"{"data":[{"results":[{"input_tokens":100,"output_tokens":50}]},{"results":[]}]}"#;
+        let usage =
+            r#"{"data":[{"results":[{"input_tokens":100,"output_tokens":50}]},{"results":[]}]}"#;
         assert_eq!(openai_tokens(usage), Some(150));
     }
 

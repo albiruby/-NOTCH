@@ -62,7 +62,10 @@ pub fn set_active(active: bool) {
 }
 
 pub fn snapshot() -> Lyrics {
-    slot().lock().map(|lyrics| lyrics.clone()).unwrap_or_default()
+    slot()
+        .lock()
+        .map(|lyrics| lyrics.clone())
+        .unwrap_or_default()
 }
 
 fn worker() {
@@ -72,14 +75,12 @@ fn worker() {
     loop {
         if ACTIVE.load(Ordering::Relaxed) {
             let media = crate::media::snapshot();
-            let next_key = if media.available
-                && !media.title.is_empty()
-                && media.title != "Unknown track"
-            {
-                format!("{}\u{1}{}", media.artist, media.title)
-            } else {
-                String::new()
-            };
+            let next_key =
+                if media.available && !media.title.is_empty() && media.title != "Unknown track" {
+                    format!("{}\u{1}{}", media.artist, media.title)
+                } else {
+                    String::new()
+                };
 
             if next_key != key {
                 key = next_key;

@@ -94,7 +94,10 @@ pub fn start(hwnd: HWND) {
         .name("notch-ai".into())
         .spawn(|| loop {
             // Nothing to fetch without a key; just sleep until asked.
-            if Provider::ALL.iter().any(|p| crate::secrets::load(p.key()).is_some()) {
+            if Provider::ALL
+                .iter()
+                .any(|p| crate::secrets::load(p.key()).is_some())
+            {
                 let next = fetch_all();
                 if let Ok(mut guard) = slot().lock() {
                     *guard = next;
@@ -127,7 +130,10 @@ pub fn refresh_if_stale() {
 }
 
 pub fn snapshot() -> Snapshot {
-    slot().lock().map(|s| s.clone()).unwrap_or_else(|e| e.into_inner().clone())
+    slot()
+        .lock()
+        .map(|s| s.clone())
+        .unwrap_or_else(|e| e.into_inner().clone())
 }
 
 fn notify() {
@@ -173,7 +179,12 @@ fn fetch_all() -> Snapshot {
 }
 
 /// GET and keep the body only on 2xx; otherwise record why.
-fn get(host: &str, path: &str, headers: &[(&str, &str)], error: &mut Option<String>) -> Option<String> {
+fn get(
+    host: &str,
+    path: &str,
+    headers: &[(&str, &str)],
+    error: &mut Option<String>,
+) -> Option<String> {
     match crate::http::get(host, path, headers) {
         Some((status, body)) if (200..300).contains(&status) => Some(body),
         Some((status, _)) => {
@@ -200,11 +211,21 @@ fn anthropic(key: &str, month: &Month) -> Stat {
     );
     let mut stat = Stat::default();
     let host = "api.anthropic.com";
-    if let Some(body) = get(host, &format!("/v1/organizations/analytics/cost?{range}"), &headers, &mut stat.error) {
+    if let Some(body) = get(
+        host,
+        &format!("/v1/organizations/analytics/cost?{range}"),
+        &headers,
+        &mut stat.error,
+    ) {
         stat.daily = report::anthropic_cost(&body, month).unwrap_or_default();
         stat.cost = Some(stat.daily.iter().sum());
     }
-    if let Some(body) = get(host, &format!("/v1/organizations/analytics/usage?{range}"), &headers, &mut stat.error) {
+    if let Some(body) = get(
+        host,
+        &format!("/v1/organizations/analytics/usage?{range}"),
+        &headers,
+        &mut stat.error,
+    ) {
         stat.tokens = report::anthropic_tokens(&body);
     }
     stat
@@ -216,11 +237,21 @@ fn openai(key: &str, month: &Month) -> Stat {
     let range = format!("start_time={}&bucket_width=1d&limit=31", month.start_unix);
     let mut stat = Stat::default();
     let host = "api.openai.com";
-    if let Some(body) = get(host, &format!("/v1/organization/costs?{range}"), &headers, &mut stat.error) {
+    if let Some(body) = get(
+        host,
+        &format!("/v1/organization/costs?{range}"),
+        &headers,
+        &mut stat.error,
+    ) {
         stat.daily = report::openai_cost(&body, month).unwrap_or_default();
         stat.cost = Some(stat.daily.iter().sum());
     }
-    if let Some(body) = get(host, &format!("/v1/organization/usage/completions?{range}"), &headers, &mut stat.error) {
+    if let Some(body) = get(
+        host,
+        &format!("/v1/organization/usage/completions?{range}"),
+        &headers,
+        &mut stat.error,
+    ) {
         stat.tokens = report::openai_tokens(&body);
     }
     stat
@@ -229,7 +260,12 @@ fn openai(key: &str, month: &Month) -> Stat {
 fn deepseek(key: &str) -> Stat {
     let bearer = format!("Bearer {key}");
     let mut stat = Stat::default();
-    if let Some(body) = get("api.deepseek.com", "/user/balance", &[("Authorization", bearer.as_str())], &mut stat.error) {
+    if let Some(body) = get(
+        "api.deepseek.com",
+        "/user/balance",
+        &[("Authorization", bearer.as_str())],
+        &mut stat.error,
+    ) {
         stat.balance = report::deepseek_balance(&body);
     }
     stat

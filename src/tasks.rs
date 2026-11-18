@@ -71,13 +71,7 @@ impl Store {
             return;
         }
         let text = text.chars().take(72).collect::<String>();
-        self.tasks.insert(
-            0,
-            Task {
-                text,
-                done: false,
-            },
-        );
+        self.tasks.insert(0, Task { text, done: false });
         if self.tasks.len() > 24 {
             self.tasks.truncate(24);
         }

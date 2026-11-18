@@ -103,11 +103,36 @@ pub fn show_menu(owner: HWND, state: &MenuState) -> Result<()> {
                 MF_STRING
             }
         };
-        AppendMenuW(menu, check(SurfaceMode::Notch), CMD_MODE_NOTCH, w!("Classic notch (glass)"))?;
-        AppendMenuW(menu, check(SurfaceMode::NotchX), CMD_MODE_NOTCH_X, w!("iPhone X notch"))?;
-        AppendMenuW(menu, check(SurfaceMode::Island), CMD_MODE_ISLAND, w!("Dynamic island (glass)"))?;
-        AppendMenuW(menu, check(SurfaceMode::IslandPro), CMD_MODE_ISLAND_PRO, w!("Dynamic Island (Pro)"))?;
-        AppendMenuW(menu, MF_STRING, CMD_RESET_POSITION, w!("Reset island position"))?;
+        AppendMenuW(
+            menu,
+            check(SurfaceMode::Notch),
+            CMD_MODE_NOTCH,
+            w!("Classic notch (glass)"),
+        )?;
+        AppendMenuW(
+            menu,
+            check(SurfaceMode::NotchX),
+            CMD_MODE_NOTCH_X,
+            w!("iPhone X notch"),
+        )?;
+        AppendMenuW(
+            menu,
+            check(SurfaceMode::Island),
+            CMD_MODE_ISLAND,
+            w!("Dynamic island (glass)"),
+        )?;
+        AppendMenuW(
+            menu,
+            check(SurfaceMode::IslandPro),
+            CMD_MODE_ISLAND_PRO,
+            w!("Dynamic Island (Pro)"),
+        )?;
+        AppendMenuW(
+            menu,
+            MF_STRING,
+            CMD_RESET_POSITION,
+            w!("Reset island position"),
+        )?;
 
         let layout_menu = CreatePopupMenu()?;
         let panel_flags = if state.layout == crate::state::Layout::Panel {
@@ -130,7 +155,12 @@ pub fn show_menu(owner: HWND, state: &MenuState) -> Result<()> {
         } else {
             MF_STRING
         };
-        AppendMenuW(layout_menu, hub_flags, CMD_LAYOUT_HUB, w!("Hub (click to open all)"))?;
+        AppendMenuW(
+            layout_menu,
+            hub_flags,
+            CMD_LAYOUT_HUB,
+            w!("Hub (click to open all)"),
+        )?;
         AppendMenuW(layout_menu, panel_flags, CMD_LAYOUT_PANEL, w!("Panel"))?;
         AppendMenuW(layout_menu, wide_flags, CMD_LAYOUT_WIDE, w!("Wide bar"))?;
         AppendMenuW(layout_menu, cards_flags, CMD_LAYOUT_CARDS, w!("Cards"))?;
@@ -174,12 +204,7 @@ pub fn show_menu(owner: HWND, state: &MenuState) -> Result<()> {
         } else {
             MF_STRING
         };
-        AppendMenuW(
-            menu,
-            start_flags,
-            CMD_AUTOSTART,
-            w!("Start with Windows"),
-        )?;
+        AppendMenuW(menu, start_flags, CMD_AUTOSTART, w!("Start with Windows"))?;
         let fullscreen_flags = if state.hide_on_fullscreen {
             MF_STRING | MF_CHECKED
         } else {
@@ -198,15 +223,7 @@ pub fn show_menu(owner: HWND, state: &MenuState) -> Result<()> {
         let mut point = POINT::default();
         let _ = GetCursorPos(&mut point);
         let _ = SetForegroundWindow(owner);
-        let _ = TrackPopupMenu(
-            menu,
-            TPM_RIGHTBUTTON,
-            point.x,
-            point.y,
-            None,
-            owner,
-            None,
-        );
+        let _ = TrackPopupMenu(menu, TPM_RIGHTBUTTON, point.x, point.y, None, owner, None);
         let _ = PostMessageW(Some(owner), WM_NULL, Default::default(), Default::default());
         let _ = DestroyMenu(menu);
     }

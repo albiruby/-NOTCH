@@ -83,27 +83,26 @@ impl Metrics {
         let compact_h = settings.compact_height.max(20.0);
         let mode = settings.mode;
         let square_top = mode.attached();
-        let (surface_w, surface_h, expanded_w, expanded_h, expanded_r) =
-            if layout == Layout::Wide {
-                // One wide bar: media, transport, metrics, and clock in a row.
-                (996.0, 188.0, 900.0, 140.0, 28.0)
-            } else if layout == Layout::Cards {
-                (424.0, 568.0, 424.0, 568.0, 0.0)
-            } else if layout == Layout::Hub {
-                // The pill grows into a top bar; cards float beneath it.
-                (hub::w(), hub::h(), 620.0, 52.0, 26.0)
-            } else {
-                // The expanded panel has a fixed content layout, so it never
-                // shrinks below the height that layout needs.
-                let expanded_h = settings.expanded_height.max(300.0);
-                (
-                    (settings.expanded_width + 96.0).max(420.0),
-                    expanded_h + 48.0,
-                    settings.expanded_width.max(300.0),
-                    expanded_h,
-                    crate::theme::radius::XL,
-                )
-            };
+        let (surface_w, surface_h, expanded_w, expanded_h, expanded_r) = if layout == Layout::Wide {
+            // One wide bar: media, transport, metrics, and clock in a row.
+            (996.0, 188.0, 900.0, 140.0, 28.0)
+        } else if layout == Layout::Cards {
+            (424.0, 568.0, 424.0, 568.0, 0.0)
+        } else if layout == Layout::Hub {
+            // The pill grows into a top bar; cards float beneath it.
+            (hub::w(), hub::h(), 620.0, 52.0, 26.0)
+        } else {
+            // The expanded panel has a fixed content layout, so it never
+            // shrinks below the height that layout needs.
+            let expanded_h = settings.expanded_height.max(300.0);
+            (
+                (settings.expanded_width + 96.0).max(420.0),
+                expanded_h + 48.0,
+                settings.expanded_width.max(300.0),
+                expanded_h,
+                crate::theme::radius::XL,
+            )
+        };
         Self {
             surface_w,
             surface_h,
@@ -114,8 +113,16 @@ impl Metrics {
                 SurfaceMode::NotchX => settings.compact_width.clamp(120.0, 220.0),
                 _ => settings.compact_width.max(120.0),
             },
-            compact_h: if mode == SurfaceMode::IslandPro { compact_h.max(36.0) } else { compact_h },
-            compact_r: if mode == SurfaceMode::IslandPro { compact_h.max(36.0) * 0.5 } else { compact_h * 0.5 },
+            compact_h: if mode == SurfaceMode::IslandPro {
+                compact_h.max(36.0)
+            } else {
+                compact_h
+            },
+            compact_r: if mode == SurfaceMode::IslandPro {
+                compact_h.max(36.0) * 0.5
+            } else {
+                compact_h * 0.5
+            },
             expanded_w,
             expanded_h,
             expanded_r,
@@ -675,7 +682,12 @@ pub mod hub {
     }
     pub fn shelf() -> Rect {
         let below_quick = quick().y + QUICK_H + GAP;
-        r(right_x(), (h() - MARGIN - SHELF_H).max(below_quick), RIGHT_W, SHELF_H)
+        r(
+            right_x(),
+            (h() - MARGIN - SHELF_H).max(below_quick),
+            RIGHT_W,
+            SHELF_H,
+        )
     }
 
     // Bottom centre: a dock with one tile per pinned app.
@@ -690,7 +702,12 @@ pub mod hub {
     }
     pub fn dock_item(count: usize, index: usize) -> Rect {
         let dock = dock(count).unwrap_or(r(0.0, 0.0, 0.0, 0.0));
-        r(dock.x + 8.0 + index as f32 * DOCK_ITEM + 4.0, dock.y + 10.0, 48.0, 48.0)
+        r(
+            dock.x + 8.0 + index as f32 * DOCK_ITEM + 4.0,
+            dock.y + 10.0,
+            48.0,
+            48.0,
+        )
     }
 
     /// Live Activities card under the media card; only while any exist.
@@ -703,7 +720,12 @@ pub mod hub {
     }
     pub fn activity_row(index: usize) -> Rect {
         let m = media();
-        r(m.x + 20.0, m.y + m.h + GAP + 44.0 + index as f32 * 52.0, m.w - 40.0, 44.0)
+        r(
+            m.x + 20.0,
+            m.y + m.h + GAP + 44.0 + index as f32 * 52.0,
+            m.w - 40.0,
+            44.0,
+        )
     }
 
     pub fn cards() -> [Rect; 7] {
@@ -727,12 +749,22 @@ pub mod hub {
     }
     pub fn app_row(index: usize) -> Rect {
         let l = launcher();
-        r(l.x + 12.0, l.y + 72.0 + index as f32 * 56.0, l.w - 24.0, 52.0)
+        r(
+            l.x + 12.0,
+            l.y + 72.0 + index as f32 * 56.0,
+            l.w - 24.0,
+            52.0,
+        )
     }
     pub const CLIP_ROWS: usize = 5;
     pub fn clip_row(index: usize) -> Rect {
         let c = clip();
-        r(c.x + 12.0, c.y + 44.0 + index as f32 * 36.0, c.w - 24.0, 34.0)
+        r(
+            c.x + 12.0,
+            c.y + 44.0 + index as f32 * 36.0,
+            c.w - 24.0,
+            34.0,
+        )
     }
     pub fn clip_clear() -> Rect {
         let c = clip();

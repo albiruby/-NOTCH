@@ -12,8 +12,8 @@ mod lyrics;
 mod media;
 mod netstatus;
 mod privacy;
-mod secrets;
 mod renderer;
+mod secrets;
 mod settings;
 mod shelf;
 mod state;
@@ -26,23 +26,25 @@ mod window;
 use std::sync::atomic::{AtomicIsize, Ordering};
 use std::time::Instant;
 
-use windows::core::{w, PCWSTR, Result};
+use windows::core::{w, Result, PCWSTR};
 use windows::Win32::Foundation::{
     HANDLE, HINSTANCE, HWND, LPARAM, LRESULT, POINT, WAIT_EVENT, WAIT_OBJECT_0, WPARAM,
 };
 use windows::Win32::Graphics::Gdi::{BeginPaint, EndPaint, ScreenToClient, PAINTSTRUCT};
 use windows::Win32::System::Com::{CoInitializeEx, COINIT_APARTMENTTHREADED};
+use windows::Win32::System::DataExchange::COPYDATASTRUCT;
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::System::SystemInformation::GetLocalTime;
 use windows::Win32::System::Threading::{
-    AttachThreadInput, CancelWaitableTimer, CreateMutexW, CreateWaitableTimerExW, GetCurrentThreadId,
-    SetWaitableTimer, CREATE_WAITABLE_TIMER_HIGH_RESOLUTION, INFINITE, TIMER_ALL_ACCESS,
+    AttachThreadInput, CancelWaitableTimer, CreateMutexW, CreateWaitableTimerExW,
+    GetCurrentThreadId, SetWaitableTimer, CREATE_WAITABLE_TIMER_HIGH_RESOLUTION, INFINITE,
+    TIMER_ALL_ACCESS,
 };
 use windows::Win32::UI::Accessibility::{SetWinEventHook, HWINEVENTHOOK};
+use windows::Win32::UI::Controls::WM_MOUSELEAVE;
 use windows::Win32::UI::HiDpi::{
     SetProcessDpiAwarenessContext, DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2,
 };
-use windows::Win32::UI::Controls::WM_MOUSELEAVE;
 use windows::Win32::UI::Input::KeyboardAndMouse::{
     GetKeyState, ReleaseCapture, SetCapture, SetFocus, TrackMouseEvent, TME_LEAVE, TRACKMOUSEEVENT,
     VK_CAPITAL,
@@ -51,7 +53,6 @@ use windows::Win32::UI::Shell::{
     DragAcceptFiles, DragFinish, DragQueryFileW, DragQueryPoint, ShellExecuteW, HDROP,
 };
 use windows::Win32::UI::WindowsAndMessaging::*;
-use windows::Win32::System::DataExchange::COPYDATASTRUCT;
 
 use audio::Audio;
 use brightness::Brightness;
@@ -201,7 +202,12 @@ impl App {
             charging: self.charging,
             tasks: self.tasks.tasks.clone(),
             shelf_paths: self.shelf.paths.clone(),
-            apps: self.apps.iter().take(8).map(|app| app.name.clone()).collect(),
+            apps: self
+                .apps
+                .iter()
+                .take(8)
+                .map(|app| app.name.clone())
+                .collect(),
             water: self.tasks.water,
             water_goal: self.tasks.water_goal,
             clip_items: self.clip_items.clone(),
@@ -269,9 +275,11 @@ impl App {
         let mut moving = self.spring.step(dt);
         self.state.t = self.spring.value;
         if let Some(anim) = &mut self.move_anim {
-            let still = anim
-                .spring
-                .step_with(dt, crate::theme::motion::SNAP_OMEGA, crate::theme::motion::SNAP_ZETA);
+            let still = anim.spring.step_with(
+                dt,
+                crate::theme::motion::SNAP_OMEGA,
+                crate::theme::motion::SNAP_ZETA,
+            );
             let k = anim.spring.value;
             let x = anim.from.0 + (anim.to.0 - anim.from.0) * k;
             let y = anim.from.1 + (anim.to.1 - anim.from.1) * k;
@@ -283,7 +291,11 @@ impl App {
             moving |= still;
         }
         if self.trace {
-            log(&format!("frame {:.2} t={:.4}", dt * 1000.0, self.spring.value));
+            log(&format!(
+                "frame {:.2} t={:.4}",
+                dt * 1000.0,
+                self.spring.value
+            ));
         }
         self.draw();
 
@@ -364,7 +376,11 @@ impl App {
         let top = m.top_gap * s;
         let clamp = |v: f32, lo: f32, hi: f32| if hi < lo { lo } else { v.clamp(lo, hi) };
         (
-            clamp(x, work.left as f32 - left, work.right as f32 - left - rw * s),
+            clamp(
+                x,
+                work.left as f32 - left,
+                work.right as f32 - left - rw * s,
+            ),
             clamp(y, work.top as f32 - top, work.bottom as f32 - top - rh * s),
         )
     }
@@ -644,10 +660,7 @@ impl App {
         }
         self.hidden_by_fullscreen = hide;
         unsafe {
-            let _ = ShowWindow(
-                self.hwnd,
-                if hide { SW_HIDE } else { SW_SHOWNOACTIVATE },
-            );
+            let _ = ShowWindow(self.hwnd, if hide { SW_HIDE } else { SW_SHOWNOACTIVATE });
         }
         if !hide {
             self.draw();
@@ -830,13 +843,16 @@ impl App {
         self.edit_text.clear();
         unsafe {
             let style = GetWindowLongPtrW(self.hwnd, GWL_EXSTYLE);
-            let restored = (style & !(WS_EX_NOACTIVATE.0 as isize)) | (self.ex_style & WS_EX_NOACTIVATE.0 as isize);
+            let restored = (style & !(WS_EX_NOACTIVATE.0 as isize))
+                | (self.ex_style & WS_EX_NOACTIVATE.0 as isize);
             SetWindowLongPtrW(self.hwnd, GWL_EXSTYLE, restored);
         }
         self.draw();
     }
 
-    fn toggle_visible(&mut self) {        self.hidden_by_user = !self.hidden_by_user;        unsafe {
+    fn toggle_visible(&mut self) {
+        self.hidden_by_user = !self.hidden_by_user;
+        unsafe {
             let _ = ShowWindow(
                 self.hwnd,
                 if self.hidden_by_user {
@@ -1105,8 +1121,15 @@ unsafe extern "system" fn notch_wndproc(
                     }
                 }
 
-                if app.layout == Layout::Cards || (app.layout == Layout::Hub && (app.dragging_volume || app.dragging_brightness)) {
-                    let x = if app.layout == Layout::Hub { x - state::hub::quick_offset().0 } else { x };
+                if app.layout == Layout::Cards
+                    || (app.layout == Layout::Hub
+                        && (app.dragging_volume || app.dragging_brightness))
+                {
+                    let x = if app.layout == Layout::Hub {
+                        x - state::hub::quick_offset().0
+                    } else {
+                        x
+                    };
                     let hits = state::card_hits();
                     if app.dragging_volume {
                         app.apply_volume(x, &hits.volume);
@@ -1156,10 +1179,14 @@ unsafe extern "system" fn notch_wndproc(
             if let Some(app) = app(hwnd) {
                 if app.editing {
                     match wparam.0 as u16 {
-                        code if code == windows::Win32::UI::Input::KeyboardAndMouse::VK_RETURN.0 => {
+                        code if code
+                            == windows::Win32::UI::Input::KeyboardAndMouse::VK_RETURN.0 =>
+                        {
                             app.end_task_edit(true);
                         }
-                        code if code == windows::Win32::UI::Input::KeyboardAndMouse::VK_ESCAPE.0 => {
+                        code if code
+                            == windows::Win32::UI::Input::KeyboardAndMouse::VK_ESCAPE.0 =>
+                        {
                             app.end_task_edit(false);
                         }
                         code if code == windows::Win32::UI::Input::KeyboardAndMouse::VK_BACK.0 => {
@@ -1209,7 +1236,8 @@ unsafe extern "system" fn notch_wndproc(
             if let Some(app) = app(hwnd) {
                 let data = &*(lparam.0 as *const COPYDATASTRUCT);
                 if data.dwData == activity::COPYDATA_TAG && !data.lpData.is_null() {
-                    let bytes = std::slice::from_raw_parts(data.lpData as *const u8, data.cbData as usize);
+                    let bytes =
+                        std::slice::from_raw_parts(data.lpData as *const u8, data.cbData as usize);
                     if let Ok(request) = serde_json::from_slice::<activity::Request>(bytes) {
                         app.activities.apply(request);
                         app.draw();
@@ -1235,10 +1263,8 @@ unsafe extern "system" fn notch_wndproc(
                 let drop = HDROP(wparam.0 as *mut core::ffi::c_void);
                 let mut point = POINT::default();
                 let _ = DragQueryPoint(drop, &mut point);
-                let inside = app.hit_with_margin(
-                    point.x as f32 / app.scale,
-                    point.y as f32 / app.scale,
-                );
+                let inside =
+                    app.hit_with_margin(point.x as f32 / app.scale, point.y as f32 / app.scale);
                 let mut paths = Vec::new();
                 if inside {
                     let count = DragQueryFileW(drop, u32::MAX, None);
@@ -1264,7 +1290,8 @@ unsafe extern "system" fn notch_wndproc(
             }
             LRESULT(0)
         }
-        WM_LBUTTONDOWN => {            if let Some(app) = app(hwnd) {
+        WM_LBUTTONDOWN => {
+            if let Some(app) = app(hwnd) {
                 let x = x_lparam(lparam) / app.scale;
                 let y = y_lparam(lparam) / app.scale;
                 // Any press on the island itself may become a drag.
@@ -1306,7 +1333,10 @@ unsafe extern "system" fn notch_wndproc(
                     }
                     return LRESULT(0);
                 }
-                if app.state.phase == Phase::Expanded && app.layout == Layout::Panel && app.page == 1 {
+                if app.state.phase == Phase::Expanded
+                    && app.layout == Layout::Panel
+                    && app.page == 1
+                {
                     let shape = app.state.shape(&app.metrics);
                     let controls = state::controls(&shape);
                     if controls.volume.contains(x, y) {
@@ -1807,32 +1837,35 @@ unsafe extern "system" fn menu_wndproc(
         tray::WM_TRAY => {
             let event = (lparam.0 as u16 as i16) as i32;
             if event == WM_RBUTTONUP as i32 || event == WM_CONTEXTMENU as i32 {
-                let notch = app(HWND(NOTCH_HWND.load(Ordering::Relaxed) as *mut core::ffi::c_void))
-                    .map(|app| app.settings.mode)
-                    .unwrap_or(SurfaceMode::Island);
+                let notch = app(HWND(
+                    NOTCH_HWND.load(Ordering::Relaxed) as *mut core::ffi::c_void
+                ))
+                .map(|app| app.settings.mode)
+                .unwrap_or(SurfaceMode::Island);
                 let menu_state = {
-                    let app = app(HWND(NOTCH_HWND.load(Ordering::Relaxed) as *mut core::ffi::c_void));
+                    let app = app(HWND(
+                        NOTCH_HWND.load(Ordering::Relaxed) as *mut core::ffi::c_void
+                    ));
                     tray::MenuState {
                         mode: notch,
-                        theme: app.as_ref().map(|app| app.settings.theme).unwrap_or_default(),
-                        autostart: tray::autostart_enabled(),
-                        opacity: app
+                        theme: app
                             .as_ref()
-                            .map(|app| app.settings.opacity)
-                            .unwrap_or(1.0),
+                            .map(|app| app.settings.theme)
+                            .unwrap_or_default(),
+                        autostart: tray::autostart_enabled(),
+                        opacity: app.as_ref().map(|app| app.settings.opacity).unwrap_or(1.0),
                         hide_on_fullscreen: app
                             .as_ref()
                             .map(|app| app.settings.hide_on_fullscreen)
                             .unwrap_or(true),
-                        layout: app
-                            .as_ref()
-                            .map(|app| app.layout)
-                            .unwrap_or_default(),
+                        layout: app.as_ref().map(|app| app.layout).unwrap_or_default(),
                     }
                 };
                 let _ = tray::show_menu(hwnd, &menu_state);
             } else if event == WM_LBUTTONUP as i32 {
-                if let Some(app) = app(HWND(NOTCH_HWND.load(Ordering::Relaxed) as *mut core::ffi::c_void)) {
+                if let Some(app) = app(HWND(
+                    NOTCH_HWND.load(Ordering::Relaxed) as *mut core::ffi::c_void
+                )) {
                     app.toggle_visible();
                 }
             }
@@ -1842,7 +1875,9 @@ unsafe extern "system" fn menu_wndproc(
             let id = wparam.0 & 0xFFFF;
             match id {
                 tray::CMD_TOGGLE => {
-                    if let Some(app) = app(HWND(NOTCH_HWND.load(Ordering::Relaxed) as *mut core::ffi::c_void)) {
+                    if let Some(app) = app(HWND(
+                        NOTCH_HWND.load(Ordering::Relaxed) as *mut core::ffi::c_void
+                    )) {
                         app.toggle_visible();
                     }
                 }
@@ -1850,12 +1885,16 @@ unsafe extern "system" fn menu_wndproc(
                     open_settings_folder();
                 }
                 tray::CMD_MODE_NOTCH => {
-                    if let Some(app) = app(HWND(NOTCH_HWND.load(Ordering::Relaxed) as *mut core::ffi::c_void)) {
+                    if let Some(app) = app(HWND(
+                        NOTCH_HWND.load(Ordering::Relaxed) as *mut core::ffi::c_void
+                    )) {
                         app.set_mode(SurfaceMode::Notch);
                     }
                 }
                 tray::CMD_THEME_VIOLET | tray::CMD_THEME_MINT | tray::CMD_THEME_CORAL => {
-                    if let Some(app) = app(HWND(NOTCH_HWND.load(Ordering::Relaxed) as *mut core::ffi::c_void)) {
+                    if let Some(app) = app(HWND(
+                        NOTCH_HWND.load(Ordering::Relaxed) as *mut core::ffi::c_void
+                    )) {
                         use crate::theme::accent::Theme;
                         let theme = match id {
                             tray::CMD_THEME_MINT => Theme::Mint,
@@ -1869,17 +1908,23 @@ unsafe extern "system" fn menu_wndproc(
                     }
                 }
                 tray::CMD_MODE_NOTCH_X => {
-                    if let Some(app) = app(HWND(NOTCH_HWND.load(Ordering::Relaxed) as *mut core::ffi::c_void)) {
+                    if let Some(app) = app(HWND(
+                        NOTCH_HWND.load(Ordering::Relaxed) as *mut core::ffi::c_void
+                    )) {
                         app.set_mode(SurfaceMode::NotchX);
                     }
                 }
                 tray::CMD_MODE_ISLAND_PRO => {
-                    if let Some(app) = app(HWND(NOTCH_HWND.load(Ordering::Relaxed) as *mut core::ffi::c_void)) {
+                    if let Some(app) = app(HWND(
+                        NOTCH_HWND.load(Ordering::Relaxed) as *mut core::ffi::c_void
+                    )) {
                         app.set_mode(SurfaceMode::IslandPro);
                     }
                 }
                 tray::CMD_MODE_ISLAND => {
-                    if let Some(app) = app(HWND(NOTCH_HWND.load(Ordering::Relaxed) as *mut core::ffi::c_void)) {
+                    if let Some(app) = app(HWND(
+                        NOTCH_HWND.load(Ordering::Relaxed) as *mut core::ffi::c_void
+                    )) {
                         app.set_mode(SurfaceMode::Island);
                     }
                 }
@@ -1888,49 +1933,67 @@ unsafe extern "system" fn menu_wndproc(
                     tray::set_autostart(!enabled);
                 }
                 tray::CMD_OPACITY_80 => {
-                    if let Some(app) = app(HWND(NOTCH_HWND.load(Ordering::Relaxed) as *mut core::ffi::c_void)) {
+                    if let Some(app) = app(HWND(
+                        NOTCH_HWND.load(Ordering::Relaxed) as *mut core::ffi::c_void
+                    )) {
                         app.set_opacity(0.8);
                     }
                 }
                 tray::CMD_OPACITY_90 => {
-                    if let Some(app) = app(HWND(NOTCH_HWND.load(Ordering::Relaxed) as *mut core::ffi::c_void)) {
+                    if let Some(app) = app(HWND(
+                        NOTCH_HWND.load(Ordering::Relaxed) as *mut core::ffi::c_void
+                    )) {
                         app.set_opacity(0.9);
                     }
                 }
                 tray::CMD_OPACITY_100 => {
-                    if let Some(app) = app(HWND(NOTCH_HWND.load(Ordering::Relaxed) as *mut core::ffi::c_void)) {
+                    if let Some(app) = app(HWND(
+                        NOTCH_HWND.load(Ordering::Relaxed) as *mut core::ffi::c_void
+                    )) {
                         app.set_opacity(1.0);
                     }
                 }
                 tray::CMD_FULLSCREEN => {
-                    if let Some(app) = app(HWND(NOTCH_HWND.load(Ordering::Relaxed) as *mut core::ffi::c_void)) {
+                    if let Some(app) = app(HWND(
+                        NOTCH_HWND.load(Ordering::Relaxed) as *mut core::ffi::c_void
+                    )) {
                         app.toggle_fullscreen_policy();
                     }
                 }
                 tray::CMD_LAYOUT_PANEL => {
-                    if let Some(app) = app(HWND(NOTCH_HWND.load(Ordering::Relaxed) as *mut core::ffi::c_void)) {
+                    if let Some(app) = app(HWND(
+                        NOTCH_HWND.load(Ordering::Relaxed) as *mut core::ffi::c_void
+                    )) {
                         app.apply_layout(Layout::Panel, true);
                     }
                 }
                 tray::CMD_LAYOUT_WIDE => {
-                    if let Some(app) = app(HWND(NOTCH_HWND.load(Ordering::Relaxed) as *mut core::ffi::c_void)) {
+                    if let Some(app) = app(HWND(
+                        NOTCH_HWND.load(Ordering::Relaxed) as *mut core::ffi::c_void
+                    )) {
                         app.apply_layout(Layout::Wide, true);
                     }
                 }
                 tray::CMD_RESET_POSITION => {
-                    if let Some(app) = app(HWND(NOTCH_HWND.load(Ordering::Relaxed) as *mut core::ffi::c_void)) {
+                    if let Some(app) = app(HWND(
+                        NOTCH_HWND.load(Ordering::Relaxed) as *mut core::ffi::c_void
+                    )) {
                         app.settings.island_anchor = None;
                         app.settings.save();
                         app.place_window(true);
                     }
                 }
                 tray::CMD_LAYOUT_HUB => {
-                    if let Some(app) = app(HWND(NOTCH_HWND.load(Ordering::Relaxed) as *mut core::ffi::c_void)) {
+                    if let Some(app) = app(HWND(
+                        NOTCH_HWND.load(Ordering::Relaxed) as *mut core::ffi::c_void
+                    )) {
                         app.apply_layout(Layout::Hub, true);
                     }
                 }
                 tray::CMD_LAYOUT_CARDS => {
-                    if let Some(app) = app(HWND(NOTCH_HWND.load(Ordering::Relaxed) as *mut core::ffi::c_void)) {
+                    if let Some(app) = app(HWND(
+                        NOTCH_HWND.load(Ordering::Relaxed) as *mut core::ffi::c_void
+                    )) {
                         app.apply_layout(Layout::Cards, true);
                     }
                 }
@@ -2055,7 +2118,8 @@ fn run() -> Result<()> {
         let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
 
         let _guard = CreateMutexW(None, true, w!("Local\\NotchSingleInstance"))?;
-        if windows::Win32::Foundation::GetLastError() == windows::Win32::Foundation::ERROR_ALREADY_EXISTS
+        if windows::Win32::Foundation::GetLastError()
+            == windows::Win32::Foundation::ERROR_ALREADY_EXISTS
         {
             return Ok(());
         }

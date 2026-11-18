@@ -12,7 +12,7 @@ use windows::Win32::Media::Audio::Endpoints::{
     IAudioEndpointVolume, IAudioEndpointVolumeCallback, IAudioEndpointVolumeCallback_Impl,
 };
 use windows::Win32::Media::Audio::{
-    eConsole, eRender, AUDIO_VOLUME_NOTIFICATION_DATA, IMMDeviceEnumerator, MMDeviceEnumerator,
+    eConsole, eRender, IMMDeviceEnumerator, MMDeviceEnumerator, AUDIO_VOLUME_NOTIFICATION_DATA,
 };
 use windows::Win32::System::Com::{CoCreateInstance, CLSCTX_ALL};
 use windows::Win32::UI::WindowsAndMessaging::{PostMessageW, WM_APP};
@@ -66,11 +66,7 @@ impl Audio {
     }
 
     pub fn level(&self) -> f32 {
-        unsafe {
-            self.volume
-                .GetMasterVolumeLevelScalar()
-                .unwrap_or(0.0)
-        }
+        unsafe { self.volume.GetMasterVolumeLevelScalar().unwrap_or(0.0) }
     }
 
     pub fn set_level(&self, level: f32) {

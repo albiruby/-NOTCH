@@ -252,22 +252,54 @@ pub mod accent {
         }
     }
 
-    pub fn c300() -> u32 { p().c300 }
-    pub fn c400() -> u32 { p().c400 }
-    pub fn c500() -> u32 { p().c500 }
-    pub fn c600() -> u32 { p().c600 }
-    pub fn c700() -> u32 { p().c700 }
-    pub fn c800() -> u32 { p().c800 }
-    pub fn c900() -> u32 { p().c900 }
+    pub fn c300() -> u32 {
+        p().c300
+    }
+    pub fn c400() -> u32 {
+        p().c400
+    }
+    pub fn c500() -> u32 {
+        p().c500
+    }
+    pub fn c600() -> u32 {
+        p().c600
+    }
+    pub fn c700() -> u32 {
+        p().c700
+    }
+    pub fn c800() -> u32 {
+        p().c800
+    }
+    pub fn c900() -> u32 {
+        p().c900
+    }
     /// Darkest glass stop.
-    pub fn base() -> u32 { p().base }
+    pub fn base() -> u32 {
+        p().base
+    }
     /// Battery ring colour (kept distinct from the accent).
-    pub fn battery() -> u32 { p().battery }
-    pub fn tint() -> u32 { p().tint }
-    pub fn light() -> u32 { p().light }
-    pub fn text1() -> u32 { p().text1 }
-    pub fn text2() -> u32 { p().text2 }
-    pub fn muted() -> u32 { p().muted }
-    pub fn disabled() -> u32 { p().disabled }
-    pub fn track() -> u32 { p().track }
+    pub fn battery() -> u32 {
+        p().battery
+    }
+    pub fn tint() -> u32 {
+        p().tint
+    }
+    pub fn light() -> u32 {
+        p().light
+    }
+    pub fn text1() -> u32 {
+        p().text1
+    }
+    pub fn text2() -> u32 {
+        p().text2
+    }
+    pub fn muted() -> u32 {
+        p().muted
+    }
+    pub fn disabled() -> u32 {
+        p().disabled
+    }
+    pub fn track() -> u32 {
+        p().track
+    }
 }

@@ -21,12 +21,7 @@ pub fn scale_for(hwnd: HWND) -> f32 {
 }
 
 /// Places a surface at the bottom-right of the monitor work area.
-pub fn place_right(
-    hwnd: HWND,
-    width_px: i32,
-    height_px: i32,
-    margin_px: i32,
-) -> Result<()> {
+pub fn place_right(hwnd: HWND, width_px: i32, height_px: i32, margin_px: i32) -> Result<()> {
     unsafe {
         let monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
         let mut info = MONITORINFO {
@@ -113,7 +108,6 @@ fn foreground_covers_monitor() -> bool {
         rect.left <= m.left && rect.top <= m.top && rect.right >= m.right && rect.bottom >= m.bottom
     }
 }
-
 
 /// Monitor and work-area rectangles (physical pixels) for the window's monitor.
 pub fn monitor_rects(hwnd: HWND) -> (RECT, RECT) {

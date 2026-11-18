@@ -9,8 +9,7 @@
 use windows::core::{PCWSTR, PWSTR};
 use windows::Win32::Foundation::ERROR_SUCCESS;
 use windows::Win32::System::Registry::{
-    RegCloseKey, RegEnumKeyExW, RegOpenKeyExW, RegQueryValueExW, HKEY, HKEY_CURRENT_USER,
-    KEY_READ,
+    RegCloseKey, RegEnumKeyExW, RegOpenKeyExW, RegQueryValueExW, HKEY, HKEY_CURRENT_USER, KEY_READ,
 };
 
 #[derive(Clone, Default, PartialEq, Debug)]
@@ -147,7 +146,10 @@ mod tests {
 
     #[test]
     fn names() {
-        assert_eq!(display_name("C:#Program Files#Zoom#bin#Zoom.exe", true), "Zoom");
+        assert_eq!(
+            display_name("C:#Program Files#Zoom#bin#Zoom.exe", true),
+            "Zoom"
+        );
         assert_eq!(
             display_name("Microsoft.WindowsCamera_8wekyb3d8bbwe", false),
             "WindowsCamera"

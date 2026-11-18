@@ -34,7 +34,13 @@ pub fn load(name: &str) -> Option<String> {
     let target = target(name);
     let mut credential: *mut CREDENTIALW = std::ptr::null_mut();
     unsafe {
-        CredReadW(PCWSTR(target.as_ptr()), CRED_TYPE_GENERIC, None, &mut credential).ok()?;
+        CredReadW(
+            PCWSTR(target.as_ptr()),
+            CRED_TYPE_GENERIC,
+            None,
+            &mut credential,
+        )
+        .ok()?;
         let cred = &*credential;
         let bytes =
             std::slice::from_raw_parts(cred.CredentialBlob, cred.CredentialBlobSize as usize);

@@ -182,7 +182,9 @@ fn read(manager: &Manager, last: &MediaInfo) -> Result<MediaInfo> {
 
 /// Reads the session thumbnail into memory. Decoding happens on the UI thread
 /// because Direct2D bitmaps are device bound.
-fn thumbnail(props: &windows::Media::Control::GlobalSystemMediaTransportControlsSessionMediaProperties) -> Option<std::sync::Arc<Vec<u8>>> {
+fn thumbnail(
+    props: &windows::Media::Control::GlobalSystemMediaTransportControlsSessionMediaProperties,
+) -> Option<std::sync::Arc<Vec<u8>>> {
     use windows::Storage::Streams::DataReader;
 
     let reference = props.Thumbnail().ok()?;

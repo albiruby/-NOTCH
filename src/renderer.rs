@@ -4,12 +4,12 @@ use windows::core::{Interface, Result};
 use windows::Win32::Foundation::HWND;
 use windows::Win32::Graphics::Direct2D::Common::{D2D1_COLOR_F, D2D1_GRADIENT_STOP, D2D_RECT_F};
 use windows::Win32::Graphics::Direct2D::{
-    ID2D1Bitmap1, ID2D1Brush, ID2D1Device, ID2D1DeviceContext, ID2D1LinearGradientBrush,
-    ID2D1SolidColorBrush, ID2D1Bitmap, D2D1_LAYER_PARAMETERS1, D2D1_LAYER_OPTIONS1_NONE, D2D1_ELLIPSE, D2D1_ANTIALIAS_MODE_PER_PRIMITIVE, D2D1_INTERPOLATION_MODE_LINEAR,
-    D2D1_BUFFER_PRECISION_8BPC_UNORM,
-    D2D1_COLOR_INTERPOLATION_MODE_STRAIGHT, D2D1_COLOR_SPACE_SRGB,
-    D2D1_DEVICE_CONTEXT_OPTIONS_NONE, D2D1_DRAW_TEXT_OPTIONS_CLIP, D2D1_EXTEND_MODE_CLAMP,
-    D2D1_LINEAR_GRADIENT_BRUSH_PROPERTIES, D2D1_ROUNDED_RECT,
+    ID2D1Bitmap, ID2D1Bitmap1, ID2D1Brush, ID2D1Device, ID2D1DeviceContext,
+    ID2D1LinearGradientBrush, ID2D1SolidColorBrush, D2D1_ANTIALIAS_MODE_PER_PRIMITIVE,
+    D2D1_BUFFER_PRECISION_8BPC_UNORM, D2D1_COLOR_INTERPOLATION_MODE_STRAIGHT,
+    D2D1_COLOR_SPACE_SRGB, D2D1_DEVICE_CONTEXT_OPTIONS_NONE, D2D1_DRAW_TEXT_OPTIONS_CLIP,
+    D2D1_ELLIPSE, D2D1_EXTEND_MODE_CLAMP, D2D1_INTERPOLATION_MODE_LINEAR, D2D1_LAYER_OPTIONS1_NONE,
+    D2D1_LAYER_PARAMETERS1, D2D1_LINEAR_GRADIENT_BRUSH_PROPERTIES, D2D1_ROUNDED_RECT,
 };
 use windows::Win32::Graphics::Direct3D::D3D_DRIVER_TYPE_HARDWARE;
 use windows::Win32::Graphics::Direct3D11::{
@@ -20,8 +20,9 @@ use windows::Win32::Graphics::DirectComposition::{
 };
 use windows::Win32::Graphics::DirectWrite::{
     DWriteCreateFactory, IDWriteFactory, IDWriteTextFormat, DWRITE_FACTORY_TYPE_SHARED,
-    DWRITE_FONT_STRETCH_NORMAL, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_WEIGHT_BOLD, DWRITE_FONT_WEIGHT_MEDIUM,
-    DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_WEIGHT_SEMI_BOLD, DWRITE_MEASURING_MODE_NATURAL, DWRITE_PARAGRAPH_ALIGNMENT_CENTER,
+    DWRITE_FONT_STRETCH_NORMAL, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_WEIGHT_BOLD,
+    DWRITE_FONT_WEIGHT_MEDIUM, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_WEIGHT_SEMI_BOLD,
+    DWRITE_MEASURING_MODE_NATURAL, DWRITE_PARAGRAPH_ALIGNMENT_CENTER,
     DWRITE_PARAGRAPH_ALIGNMENT_NEAR, DWRITE_TEXT_ALIGNMENT_CENTER, DWRITE_TEXT_ALIGNMENT_LEADING,
     DWRITE_TEXT_ALIGNMENT_TRAILING,
 };
@@ -33,8 +34,8 @@ use windows::Win32::Graphics::Dxgi::{
     DXGI_SWAP_CHAIN_DESC1, DXGI_SWAP_EFFECT_FLIP_SEQUENTIAL, DXGI_USAGE_RENDER_TARGET_OUTPUT,
 };
 use windows::Win32::Graphics::Imaging::{
-    CLSID_WICImagingFactory, IWICImagingFactory, WICBitmapDitherTypeNone, WICBitmapPaletteTypeCustom,
-    WICDecodeMetadataCacheOnLoad,
+    CLSID_WICImagingFactory, IWICImagingFactory, WICBitmapDitherTypeNone,
+    WICBitmapPaletteTypeCustom, WICDecodeMetadataCacheOnLoad,
 };
 use windows::Win32::System::Com::{CoCreateInstance, CLSCTX_INPROC_SERVER};
 use windows_numerics::Vector2;
@@ -137,7 +138,8 @@ impl Renderer {
             )?;
             let d3d = d3d.unwrap();
             let dxgi: IDXGIDevice = d3d.cast()?;
-            let d2d: ID2D1Device = windows::Win32::Graphics::Direct2D::D2D1CreateDevice(&dxgi, None)?;
+            let d2d: ID2D1Device =
+                windows::Win32::Graphics::Direct2D::D2D1CreateDevice(&dxgi, None)?;
 
             let dcomp: IDCompositionDevice = DCompositionCreateDevice2(&d2d)?;
             let target = dcomp.CreateTargetForHwnd(hwnd, true)?;
@@ -146,8 +148,11 @@ impl Renderer {
 
             let adapter = dxgi.GetAdapter()?;
             let factory: IDXGIFactory2 = adapter.GetParent()?;
-            let swapchain =
-                factory.CreateSwapChainForComposition(&d3d, &swapchain_desc(width, height), None)?;
+            let swapchain = factory.CreateSwapChainForComposition(
+                &d3d,
+                &swapchain_desc(width, height),
+                None,
+            )?;
             let surface: IDXGISurface = swapchain.GetBuffer(0)?;
             let ctx = d2d.CreateDeviceContext(D2D1_DEVICE_CONTEXT_OPTIONS_NONE)?;
             let bitmap = ctx.CreateBitmapFromDxgiSurface(&surface, None)?;
@@ -513,12 +518,24 @@ impl Renderer {
                     let center_y = (visible_top + shape.bottom()) * 0.5;
                     let mark_r = ((shape.bottom() - visible_top) * 0.5 - 6.0).clamp(7.0, 11.0);
                     let mark_cx = shape.x + 10.0 + mark_r;
-                    draw_logo(ctx, &self.fmt_logo, mark_cx, center_y, mark_r, s, compact_alpha)?;
+                    draw_logo(
+                        ctx,
+                        &self.fmt_logo,
+                        mark_cx,
+                        center_y,
+                        mark_r,
+                        s,
+                        compact_alpha,
+                    )?;
 
                     let time_w = 54.0;
                     // The Pro island keeps its camera at the right end, so
                     // the clock moves in to make room for the lens.
-                    let lens_pad = if p.mode == crate::state::SurfaceMode::IslandPro { 18.0 } else { 0.0 };
+                    let lens_pad = if p.mode == crate::state::SurfaceMode::IslandPro {
+                        18.0
+                    } else {
+                        0.0
+                    };
                     let time_brush = solid(ctx, &primary)?;
                     time_brush.SetOpacity(compact_alpha);
                     draw_text(
@@ -555,7 +572,9 @@ impl Renderer {
                         }
                     }
 
-                    if let Some(activity) = p.activities.first().filter(|_| mid_right - mid_left > 40.0) {
+                    if let Some(activity) =
+                        p.activities.first().filter(|_| mid_right - mid_left > 40.0)
+                    {
                         draw_activity_inline(
                             ctx,
                             &self.fmt_icon_sm,
@@ -574,7 +593,13 @@ impl Renderer {
                             draw_rounded_art(
                                 ctx,
                                 art,
-                                scaled_rect(mid_left, center_y - art_size * 0.5, art_size, art_size, s),
+                                scaled_rect(
+                                    mid_left,
+                                    center_y - art_size * 0.5,
+                                    art_size,
+                                    art_size,
+                                    s,
+                                ),
                                 5.0 * s,
                                 compact_alpha,
                             )?;
@@ -719,322 +744,331 @@ impl Renderer {
 
                 if p.page == 0 {
                     let divider = solid(ctx, &border)?;
-                divider.SetOpacity(panel_alpha);
-                ctx.FillRectangle(
-                    &D2D_RECT_F {
-                        left: (x + pad) * s,
-                        top: (y + 80.0) * s,
-                        right: (x + w - pad) * s,
-                        bottom: (y + 81.0) * s,
-                    },
-                    &divider,
-                );
-
-                let bar_left = x + pad;
-                let bar_w = w - pad * 2.0;
-                let ratio = if p.media.duration > 0.0 {
-                    (p.media.position / p.media.duration).clamp(0.0, 1.0)
-                } else {
-                    0.0
-                };
-
-                if p.media.available {
-                    draw_slider(ctx, bar_left, y + 91.5, bar_w, ratio, true, s, panel_alpha)?;
-                } else {
-                    draw_slider(ctx, bar_left, y + 91.5, bar_w, 0.0, false, s, panel_alpha)?;
-                }
-
-                if p.media.available {
-                    let time_brush = solid(ctx, &secondary)?;
-                    time_brush.SetOpacity(0.8 * panel_alpha);
-                    draw_text(
-                        ctx,
-                        &format_time(p.media.position),
-                        &self.fmt_time_left,
-                        scaled_rect(bar_left, y + 99.0, bar_w * 0.5, 14.0, s),
-                        &time_brush,
-                    );
-                    draw_text(
-                        ctx,
-                        &format_time(p.media.duration),
-                        &self.fmt_time_right,
-                        scaled_rect(bar_left + bar_w * 0.5, y + 99.0, bar_w * 0.5, 14.0, s),
-                        &time_brush,
+                    divider.SetOpacity(panel_alpha);
+                    ctx.FillRectangle(
+                        &D2D_RECT_F {
+                            left: (x + pad) * s,
+                            top: (y + 80.0) * s,
+                            right: (x + w - pad) * s,
+                            bottom: (y + 81.0) * s,
+                        },
+                        &divider,
                     );
 
-                    let transport = crate::state::transport(&p.shape);
-                    let glyph_brush = solid(ctx, &secondary)?;
-                    glyph_brush.SetOpacity(0.85 * panel_alpha);
-                    draw_text(
-                        ctx,
-                        "\u{E892}",
-                        &self.fmt_icon,
-                        scaled_rect(
-                            transport.prev.x,
-                            transport.prev.y,
-                            transport.prev.w,
-                            transport.prev.h,
-                            s,
-                        ),
-                        &glyph_brush,
+                    let bar_left = x + pad;
+                    let bar_w = w - pad * 2.0;
+                    let ratio = if p.media.duration > 0.0 {
+                        (p.media.position / p.media.duration).clamp(0.0, 1.0)
+                    } else {
+                        0.0
+                    };
+
+                    if p.media.available {
+                        draw_slider(ctx, bar_left, y + 91.5, bar_w, ratio, true, s, panel_alpha)?;
+                    } else {
+                        draw_slider(ctx, bar_left, y + 91.5, bar_w, 0.0, false, s, panel_alpha)?;
+                    }
+
+                    if p.media.available {
+                        let time_brush = solid(ctx, &secondary)?;
+                        time_brush.SetOpacity(0.8 * panel_alpha);
+                        draw_text(
+                            ctx,
+                            &format_time(p.media.position),
+                            &self.fmt_time_left,
+                            scaled_rect(bar_left, y + 99.0, bar_w * 0.5, 14.0, s),
+                            &time_brush,
+                        );
+                        draw_text(
+                            ctx,
+                            &format_time(p.media.duration),
+                            &self.fmt_time_right,
+                            scaled_rect(bar_left + bar_w * 0.5, y + 99.0, bar_w * 0.5, 14.0, s),
+                            &time_brush,
+                        );
+
+                        let transport = crate::state::transport(&p.shape);
+                        let glyph_brush = solid(ctx, &secondary)?;
+                        glyph_brush.SetOpacity(0.85 * panel_alpha);
+                        draw_text(
+                            ctx,
+                            "\u{E892}",
+                            &self.fmt_icon,
+                            scaled_rect(
+                                transport.prev.x,
+                                transport.prev.y,
+                                transport.prev.w,
+                                transport.prev.h,
+                                s,
+                            ),
+                            &glyph_brush,
+                        );
+
+                        let play_disc = violet_gradient(
+                            ctx,
+                            &scaled_rect(
+                                transport.play.x,
+                                transport.play.y,
+                                transport.play.w,
+                                transport.play.h,
+                                s,
+                            ),
+                            panel_alpha,
+                        )?;
+                        ctx.FillEllipse(
+                            &circle(
+                                (transport.play.x + transport.play.w * 0.5) * s,
+                                (transport.play.y + transport.play.h * 0.5) * s,
+                                transport.play.w * 0.5 * s,
+                            ),
+                            &play_disc,
+                        );
+                        let play_brush = solid(ctx, &theme::rgb(0xFFFFFF, 1.0))?;
+                        play_brush.SetOpacity(panel_alpha);
+                        draw_text(
+                            ctx,
+                            if p.media.playing {
+                                "\u{E769}"
+                            } else {
+                                "\u{E768}"
+                            },
+                            &self.fmt_icon,
+                            scaled_rect(
+                                transport.play.x,
+                                transport.play.y,
+                                transport.play.w,
+                                transport.play.h,
+                                s,
+                            ),
+                            &play_brush,
+                        );
+
+                        draw_text(
+                            ctx,
+                            "\u{E893}",
+                            &self.fmt_icon,
+                            scaled_rect(
+                                transport.next.x,
+                                transport.next.y,
+                                transport.next.w,
+                                transport.next.h,
+                                s,
+                            ),
+                            &glyph_brush,
+                        );
+                    }
+
+                    let divider2 = solid(ctx, &border)?;
+                    divider2.SetOpacity(panel_alpha);
+                    ctx.FillRectangle(
+                        &D2D_RECT_F {
+                            left: (x + pad) * s,
+                            top: (y + 164.0) * s,
+                            right: (x + w - pad) * s,
+                            bottom: (y + 165.0) * s,
+                        },
+                        &divider2,
                     );
 
-                    let play_disc = violet_gradient(
+                    metric(
                         ctx,
-                        &scaled_rect(transport.play.x, transport.play.y, transport.play.w, transport.play.h, s),
+                        "CPU",
+                        p.cpu,
+                        x + pad,
+                        y + 172.0,
+                        w - pad * 2.0,
+                        s,
                         panel_alpha,
-                    )?;
-                    ctx.FillEllipse(
-                        &circle(
-                            (transport.play.x + transport.play.w * 0.5) * s,
-                            (transport.play.y + transport.play.h * 0.5) * s,
-                            transport.play.w * 0.5 * s,
-                        ),
-                        &play_disc,
+                        &primary,
+                        &secondary,
+                        &accent,
+                        &track,
+                        &self.fmt_label,
+                        &self.fmt_value,
                     );
-                    let play_brush = solid(ctx, &theme::rgb(0xFFFFFF, 1.0))?;
-                    play_brush.SetOpacity(panel_alpha);
-                    draw_text(
+
+                    metric(
                         ctx,
-                        if p.media.playing { "\u{E769}" } else { "\u{E768}" },
-                        &self.fmt_icon,
-                        scaled_rect(
-                            transport.play.x,
-                            transport.play.y,
-                            transport.play.w,
-                            transport.play.h,
-                            s,
-                        ),
-                        &play_brush,
+                        "MEMORY",
+                        p.ram,
+                        x + pad,
+                        y + 200.0,
+                        w - pad * 2.0,
+                        s,
+                        panel_alpha,
+                        &primary,
+                        &secondary,
+                        &accent,
+                        &track,
+                        &self.fmt_label,
+                        &self.fmt_value,
                     );
-
-                    draw_text(
-                        ctx,
-                        "\u{E893}",
-                        &self.fmt_icon,
-                        scaled_rect(
-                            transport.next.x,
-                            transport.next.y,
-                            transport.next.w,
-                            transport.next.h,
-                            s,
-                        ),
-                        &glyph_brush,
-                    );
-                }
-
-                let divider2 = solid(ctx, &border)?;
-                divider2.SetOpacity(panel_alpha);
-                ctx.FillRectangle(
-                    &D2D_RECT_F {
-                        left: (x + pad) * s,
-                        top: (y + 164.0) * s,
-                        right: (x + w - pad) * s,
-                        bottom: (y + 165.0) * s,
-                    },
-                    &divider2,
-                );
-
-                metric(
-                    ctx,
-                    "CPU",
-                    p.cpu,
-                    x + pad,
-                    y + 172.0,
-                    w - pad * 2.0,
-                    s,
-                    panel_alpha,
-                    &primary,
-                    &secondary,
-                    &accent,
-                    &track,
-                    &self.fmt_label,
-                    &self.fmt_value,
-                );
-
-                metric(
-                    ctx,
-                    "MEMORY",
-                    p.ram,
-                    x + pad,
-                    y + 200.0,
-                    w - pad * 2.0,
-                    s,
-                    panel_alpha,
-                    &primary,
-                    &secondary,
-                    &accent,
-                    &track,
-                    &self.fmt_label,
-                    &self.fmt_value,
-                );
-
                 }
 
                 if p.page == 1 {
-                let ctrl_y = 96.0;
+                    let ctrl_y = 96.0;
 
-                let divider3 = solid(ctx, &border)?;
-                divider3.SetOpacity(panel_alpha);
-                ctx.FillRectangle(
-                    &D2D_RECT_F {
-                        left: (x + pad) * s,
-                        top: (y + ctrl_y - 8.0) * s,
-                        right: (x + w - pad) * s,
-                        bottom: (y + ctrl_y - 7.0) * s,
-                    },
-                    &divider3,
-                );
+                    let divider3 = solid(ctx, &border)?;
+                    divider3.SetOpacity(panel_alpha);
+                    ctx.FillRectangle(
+                        &D2D_RECT_F {
+                            left: (x + pad) * s,
+                            top: (y + ctrl_y - 8.0) * s,
+                            right: (x + w - pad) * s,
+                            bottom: (y + ctrl_y - 7.0) * s,
+                        },
+                        &divider3,
+                    );
 
-                let label_brush = solid(ctx, &secondary)?;
-                label_brush.SetOpacity(0.75 * panel_alpha);
-                draw_text(
-                    ctx,
-                    "VOLUME",
-                    &self.fmt_label,
-                    scaled_rect(x + pad, y + ctrl_y, 120.0, 14.0, s),
-                    &label_brush,
-                );
+                    let label_brush = solid(ctx, &secondary)?;
+                    label_brush.SetOpacity(0.75 * panel_alpha);
+                    draw_text(
+                        ctx,
+                        "VOLUME",
+                        &self.fmt_label,
+                        scaled_rect(x + pad, y + ctrl_y, 120.0, 14.0, s),
+                        &label_brush,
+                    );
 
-                let value_text = if p.muted {
-                    "MUTED".to_string()
-                } else {
-                    format!("{:.0}%", p.volume * 100.0)
-                };
-                let value_brush = solid(ctx, &primary)?;
-                value_brush.SetOpacity(panel_alpha);
-                draw_text(
-                    ctx,
-                    &value_text,
-                    &self.fmt_value,
-                    scaled_rect(x + w - pad - 120.0, y + ctrl_y, 120.0, 14.0, s),
-                    &value_brush,
-                );
+                    let value_text = if p.muted {
+                        "MUTED".to_string()
+                    } else {
+                        format!("{:.0}%", p.volume * 100.0)
+                    };
+                    let value_brush = solid(ctx, &primary)?;
+                    value_brush.SetOpacity(panel_alpha);
+                    draw_text(
+                        ctx,
+                        &value_text,
+                        &self.fmt_value,
+                        scaled_rect(x + w - pad - 120.0, y + ctrl_y, 120.0, 14.0, s),
+                        &value_brush,
+                    );
 
-                let bar_w = w - pad * 2.0;
-                let track_brush = solid(ctx, &track)?;
-                track_brush.SetOpacity(panel_alpha);
-                ctx.FillRoundedRectangle(
-                    &D2D1_ROUNDED_RECT {
-                        rect: scaled_rect_raw(x + pad, y + ctrl_y + 18.0, bar_w, 3.0, s),
-                        radiusX: 1.5 * s,
-                        radiusY: 1.5 * s,
-                    },
-                    &track_brush,
-                );
-                if p.volume > 0.001 && !p.muted {
-                    let fill_brush = solid(ctx, &accent)?;
-                    fill_brush.SetOpacity(panel_alpha);
+                    let bar_w = w - pad * 2.0;
+                    let track_brush = solid(ctx, &track)?;
+                    track_brush.SetOpacity(panel_alpha);
                     ctx.FillRoundedRectangle(
                         &D2D1_ROUNDED_RECT {
-                            rect: scaled_rect_raw(
-                                x + pad,
-                                y + ctrl_y + 18.0,
-                                bar_w * p.volume.clamp(0.0, 1.0),
-                                3.0,
-                                s,
-                            ),
+                            rect: scaled_rect_raw(x + pad, y + ctrl_y + 18.0, bar_w, 3.0, s),
                             radiusX: 1.5 * s,
                             radiusY: 1.5 * s,
                         },
-                        &fill_brush,
+                        &track_brush,
                     );
-                }
+                    if p.volume > 0.001 && !p.muted {
+                        let fill_brush = solid(ctx, &accent)?;
+                        fill_brush.SetOpacity(panel_alpha);
+                        ctx.FillRoundedRectangle(
+                            &D2D1_ROUNDED_RECT {
+                                rect: scaled_rect_raw(
+                                    x + pad,
+                                    y + ctrl_y + 18.0,
+                                    bar_w * p.volume.clamp(0.0, 1.0),
+                                    3.0,
+                                    s,
+                                ),
+                                radiusX: 1.5 * s,
+                                radiusY: 1.5 * s,
+                            },
+                            &fill_brush,
+                        );
+                    }
 
-                let bright_label = solid(ctx, &secondary)?;
-                bright_label.SetOpacity(0.75 * panel_alpha);
-                draw_text(
-                    ctx,
-                    "BRIGHTNESS",
-                    &self.fmt_label,
-                    scaled_rect(x + pad, y + ctrl_y + 34.0, 160.0, 14.0, s),
-                    &bright_label,
-                );
+                    let bright_label = solid(ctx, &secondary)?;
+                    bright_label.SetOpacity(0.75 * panel_alpha);
+                    draw_text(
+                        ctx,
+                        "BRIGHTNESS",
+                        &self.fmt_label,
+                        scaled_rect(x + pad, y + ctrl_y + 34.0, 160.0, 14.0, s),
+                        &bright_label,
+                    );
 
-                let bright_text = if p.has_brightness {
-                    format!("{:.0}%", p.brightness * 100.0)
-                } else {
-                    "N/A".to_string()
-                };
-                let bright_value = solid(ctx, &primary)?;
-                bright_value.SetOpacity(panel_alpha);
-                draw_text(
-                    ctx,
-                    &bright_text,
-                    &self.fmt_value,
-                    scaled_rect(x + w - pad - 120.0, y + ctrl_y + 34.0, 120.0, 14.0, s),
-                    &bright_value,
-                );
+                    let bright_text = if p.has_brightness {
+                        format!("{:.0}%", p.brightness * 100.0)
+                    } else {
+                        "N/A".to_string()
+                    };
+                    let bright_value = solid(ctx, &primary)?;
+                    bright_value.SetOpacity(panel_alpha);
+                    draw_text(
+                        ctx,
+                        &bright_text,
+                        &self.fmt_value,
+                        scaled_rect(x + w - pad - 120.0, y + ctrl_y + 34.0, 120.0, 14.0, s),
+                        &bright_value,
+                    );
 
-                let bright_track = solid(ctx, &track)?;
-                bright_track.SetOpacity(panel_alpha);
-                ctx.FillRoundedRectangle(
-                    &D2D1_ROUNDED_RECT {
-                        rect: scaled_rect_raw(x + pad, y + ctrl_y + 52.0, bar_w, 3.0, s),
-                        radiusX: 1.5 * s,
-                        radiusY: 1.5 * s,
-                    },
-                    &bright_track,
-                );
-                if p.has_brightness && p.brightness > 0.001 {
-                    let bright_fill = solid(ctx, &accent)?;
-                    bright_fill.SetOpacity(panel_alpha);
+                    let bright_track = solid(ctx, &track)?;
+                    bright_track.SetOpacity(panel_alpha);
                     ctx.FillRoundedRectangle(
                         &D2D1_ROUNDED_RECT {
-                            rect: scaled_rect_raw(
-                                x + pad,
-                                y + ctrl_y + 52.0,
-                                bar_w * p.brightness.clamp(0.0, 1.0),
-                                3.0,
-                                s,
-                            ),
+                            rect: scaled_rect_raw(x + pad, y + ctrl_y + 52.0, bar_w, 3.0, s),
                             radiusX: 1.5 * s,
                             radiusY: 1.5 * s,
                         },
-                        &bright_fill,
+                        &bright_track,
                     );
-                }
+                    if p.has_brightness && p.brightness > 0.001 {
+                        let bright_fill = solid(ctx, &accent)?;
+                        bright_fill.SetOpacity(panel_alpha);
+                        ctx.FillRoundedRectangle(
+                            &D2D1_ROUNDED_RECT {
+                                rect: scaled_rect_raw(
+                                    x + pad,
+                                    y + ctrl_y + 52.0,
+                                    bar_w * p.brightness.clamp(0.0, 1.0),
+                                    3.0,
+                                    s,
+                                ),
+                                radiusX: 1.5 * s,
+                                radiusY: 1.5 * s,
+                            },
+                            &bright_fill,
+                        );
+                    }
 
-                let (wifi_text, wifi_on) = match p.net.wifi {
-                    Some(true) => ("WI-FI ON", true),
-                    Some(false) => ("WI-FI OFF", false),
-                    None => ("WI-FI N/A", false),
-                };
-                let (bt_text, bt_on) = match p.net.bluetooth {
-                    Some(true) => ("BLUETOOTH ON", true),
-                    Some(false) => ("BLUETOOTH OFF", false),
-                    None => ("BLUETOOTH N/A", false),
-                };
+                    let (wifi_text, wifi_on) = match p.net.wifi {
+                        Some(true) => ("WI-FI ON", true),
+                        Some(false) => ("WI-FI OFF", false),
+                        None => ("WI-FI N/A", false),
+                    };
+                    let (bt_text, bt_on) = match p.net.bluetooth {
+                        Some(true) => ("BLUETOOTH ON", true),
+                        Some(false) => ("BLUETOOTH OFF", false),
+                        None => ("BLUETOOTH N/A", false),
+                    };
 
-                let wifi_brush = if wifi_on {
-                    solid(ctx, &theme::rgb(theme::color::SUCCESS, panel_alpha))?
-                } else {
-                    let brush = solid(ctx, &secondary)?;
-                    brush.SetOpacity(0.6 * panel_alpha);
-                    brush
-                };
-                draw_text(
-                    ctx,
-                    wifi_text,
-                    &self.fmt_status,
-                    scaled_rect(x + pad, y + ctrl_y + 74.0, 140.0, 14.0, s),
-                    &wifi_brush,
-                );
+                    let wifi_brush = if wifi_on {
+                        solid(ctx, &theme::rgb(theme::color::SUCCESS, panel_alpha))?
+                    } else {
+                        let brush = solid(ctx, &secondary)?;
+                        brush.SetOpacity(0.6 * panel_alpha);
+                        brush
+                    };
+                    draw_text(
+                        ctx,
+                        wifi_text,
+                        &self.fmt_status,
+                        scaled_rect(x + pad, y + ctrl_y + 74.0, 140.0, 14.0, s),
+                        &wifi_brush,
+                    );
 
-                let bt_brush = if bt_on {
-                    solid(ctx, &theme::rgb(theme::color::SUCCESS, panel_alpha))?
-                } else {
-                    let brush = solid(ctx, &secondary)?;
-                    brush.SetOpacity(0.6 * panel_alpha);
-                    brush
-                };
-                draw_text(
-                    ctx,
-                    bt_text,
-                    &self.fmt_status,
-                    scaled_rect(x + pad + 150.0, y + ctrl_y + 74.0, 180.0, 14.0, s),
-                    &bt_brush,
-                );
+                    let bt_brush = if bt_on {
+                        solid(ctx, &theme::rgb(theme::color::SUCCESS, panel_alpha))?
+                    } else {
+                        let brush = solid(ctx, &secondary)?;
+                        brush.SetOpacity(0.6 * panel_alpha);
+                        brush
+                    };
+                    draw_text(
+                        ctx,
+                        bt_text,
+                        &self.fmt_status,
+                        scaled_rect(x + pad + 150.0, y + ctrl_y + 74.0, 180.0, 14.0, s),
+                        &bt_brush,
+                    );
                 }
 
                 if p.page == 2 {
@@ -1172,7 +1206,13 @@ impl Renderer {
                         border_brush.SetOpacity(0.8 * panel_alpha);
                         ctx.DrawRoundedRectangle(
                             &D2D1_ROUNDED_RECT {
-                                rect: scaled_rect(add_rect.x - 6.0, add_rect.y, add_rect.w + 12.0, add_rect.h, s),
+                                rect: scaled_rect(
+                                    add_rect.x - 6.0,
+                                    add_rect.y,
+                                    add_rect.w + 12.0,
+                                    add_rect.h,
+                                    s,
+                                ),
                                 radiusX: 6.0 * s,
                                 radiusY: 6.0 * s,
                             },
@@ -1478,14 +1518,26 @@ impl Renderer {
                     ctx,
                     "OVERVIEW",
                     &self.fmt_tab,
-                    scaled_rect(tabs.overview.x, tabs.overview.y, tabs.overview.w, tabs.overview.h, s),
+                    scaled_rect(
+                        tabs.overview.x,
+                        tabs.overview.y,
+                        tabs.overview.w,
+                        tabs.overview.h,
+                        s,
+                    ),
                     if p.page == 0 { &tab_active } else { &tab_idle },
                 );
                 draw_text(
                     ctx,
                     "CONTROLS",
                     &self.fmt_tab,
-                    scaled_rect(tabs.controls.x, tabs.controls.y, tabs.controls.w, tabs.controls.h, s),
+                    scaled_rect(
+                        tabs.controls.x,
+                        tabs.controls.y,
+                        tabs.controls.w,
+                        tabs.controls.h,
+                        s,
+                    ),
                     if p.page == 1 { &tab_active } else { &tab_idle },
                 );
                 draw_text(
@@ -1597,7 +1649,15 @@ impl Renderer {
                         Glass::Tile,
                         s,
                     )?;
-                    draw_logo(ctx, &self.fmt_logo, x + 46.0, y + 48.0, 13.0, s, panel_alpha)?;
+                    draw_logo(
+                        ctx,
+                        &self.fmt_logo,
+                        x + 46.0,
+                        y + 48.0,
+                        13.0,
+                        s,
+                        panel_alpha,
+                    )?;
                 }
 
                 if p.media.available {
@@ -1638,7 +1698,16 @@ impl Renderer {
                 } else {
                     0.0
                 };
-                draw_slider(ctx, media_left, y + 73.5, bar_w, ratio, true, s, panel_alpha)?;
+                draw_slider(
+                    ctx,
+                    media_left,
+                    y + 73.5,
+                    bar_w,
+                    ratio,
+                    true,
+                    s,
+                    panel_alpha,
+                )?;
                 let time_brush = solid(ctx, &secondary)?;
                 time_brush.SetOpacity(0.65 * panel_alpha);
                 draw_text(
@@ -1683,7 +1752,11 @@ impl Renderer {
                 play_brush.SetOpacity(panel_alpha);
                 draw_text(
                     ctx,
-                    if p.media.playing { "\u{E769}" } else { "\u{E768}" },
+                    if p.media.playing {
+                        "\u{E769}"
+                    } else {
+                        "\u{E768}"
+                    },
                     &self.fmt_icon,
                     scaled_rect(wide.play.x, wide.play.y, wide.play.w, wide.play.h, s),
                     &play_brush,
@@ -1735,7 +1808,17 @@ impl Renderer {
                     } else {
                         accent
                     };
-                    draw_ring(ctx, cx, cy, 22.0, 4.0, value / 100.0, &ring_color, s, panel_alpha)?;
+                    draw_ring(
+                        ctx,
+                        cx,
+                        cy,
+                        22.0,
+                        4.0,
+                        value / 100.0,
+                        &ring_color,
+                        s,
+                        panel_alpha,
+                    )?;
                     let m_value = solid(ctx, &primary)?;
                     m_value.SetOpacity(panel_alpha);
                     draw_text(
@@ -1793,7 +1876,13 @@ impl Renderer {
                 draw_logo(ctx, &self.fmt_logo, x + 30.0, cy, 13.0, s, panel_alpha)?;
                 let mut left = x + 54.0;
                 if let Some(art) = &self.art_bitmap {
-                    draw_rounded_art(ctx, art, scaled_rect(left, cy - 14.0, 28.0, 28.0, s), 7.0 * s, panel_alpha)?;
+                    draw_rounded_art(
+                        ctx,
+                        art,
+                        scaled_rect(left, cy - 14.0, 28.0, 28.0, s),
+                        7.0 * s,
+                        panel_alpha,
+                    )?;
                     left += 36.0;
                 }
                 let title = solid(ctx, &primary)?;
@@ -1801,10 +1890,28 @@ impl Renderer {
                 let sub = solid(ctx, &secondary)?;
                 sub.SetOpacity(0.8 * panel_alpha);
                 if p.media.available {
-                    draw_text(ctx, &p.media.title, &self.fmt_pill_title, scaled_rect(left, cy - 15.0, 170.0, 16.0, s), &title);
-                    draw_text(ctx, &p.media.artist, &self.fmt_small, scaled_rect(left, cy + 1.0, 170.0, 14.0, s), &sub);
+                    draw_text(
+                        ctx,
+                        &p.media.title,
+                        &self.fmt_pill_title,
+                        scaled_rect(left, cy - 15.0, 170.0, 16.0, s),
+                        &title,
+                    );
+                    draw_text(
+                        ctx,
+                        &p.media.artist,
+                        &self.fmt_small,
+                        scaled_rect(left, cy + 1.0, 170.0, 14.0, s),
+                        &sub,
+                    );
                 } else {
-                    draw_text(ctx, "NOTCH", &self.fmt_pill_title, scaled_rect(left, cy - 8.0, 170.0, 16.0, s), &title);
+                    draw_text(
+                        ctx,
+                        "NOTCH",
+                        &self.fmt_pill_title,
+                        scaled_rect(left, cy - 8.0, 170.0, 16.0, s),
+                        &title,
+                    );
                 }
 
                 let line = solid(ctx, &theme::rgb(theme::accent::light(), 0.10 * panel_alpha))?;
@@ -1812,8 +1919,20 @@ impl Renderer {
                 ctx.FillRectangle(&scaled_rect(sys_x - 12.0, cy - 13.0, 1.0, 26.0, s), &line);
                 for (index, (label, value)) in [("CPU", p.cpu), ("RAM", p.ram)].iter().enumerate() {
                     let col = sys_x + index as f32 * 48.0;
-                    draw_text(ctx, label, &self.fmt_status, scaled_rect(col, cy - 14.0, 44.0, 12.0, s), &sub);
-                    draw_text(ctx, &format!("{value:.0}%"), &self.fmt_pill_title, scaled_rect(col, cy - 2.0, 44.0, 16.0, s), &title);
+                    draw_text(
+                        ctx,
+                        label,
+                        &self.fmt_status,
+                        scaled_rect(col, cy - 14.0, 44.0, 12.0, s),
+                        &sub,
+                    );
+                    draw_text(
+                        ctx,
+                        &format!("{value:.0}%"),
+                        &self.fmt_pill_title,
+                        scaled_rect(col, cy - 2.0, 44.0, 16.0, s),
+                        &title,
+                    );
                 }
                 ctx.FillRectangle(&scaled_rect(sys_x + 98.0, cy - 13.0, 1.0, 26.0, s), &line);
                 let on = |state: Option<bool>| -> Result<ID2D1SolidColorBrush> {
@@ -1824,8 +1943,20 @@ impl Renderer {
                     };
                     solid(ctx, &color)
                 };
-                draw_text(ctx, "\u{E701}", &self.fmt_icon, scaled_rect(sys_x + 108.0, cy - 12.0, 24.0, 24.0, s), &on(p.net.wifi)?);
-                draw_text(ctx, "\u{E702}", &self.fmt_icon, scaled_rect(sys_x + 136.0, cy - 12.0, 24.0, 24.0, s), &on(p.net.bluetooth)?);
+                draw_text(
+                    ctx,
+                    "\u{E701}",
+                    &self.fmt_icon,
+                    scaled_rect(sys_x + 108.0, cy - 12.0, 24.0, 24.0, s),
+                    &on(p.net.wifi)?,
+                );
+                draw_text(
+                    ctx,
+                    "\u{E702}",
+                    &self.fmt_icon,
+                    scaled_rect(sys_x + 136.0, cy - 12.0, 24.0, 24.0, s),
+                    &on(p.net.bluetooth)?,
+                );
                 let mut dot_x = sys_x + 170.0;
                 for (on, color) in [
                     (!p.privacy.cam.is_empty(), theme::color::SUCCESS),
@@ -1839,9 +1970,27 @@ impl Renderer {
                 }
 
                 let right = x + w - 44.0;
-                draw_text(ctx, &p.date, &self.fmt_time_right, scaled_rect(right - 120.0, cy - 15.0, 120.0, 14.0, s), &sub);
-                draw_text(ctx, &p.time, &self.fmt_pill_time, scaled_rect(right - 120.0, cy - 1.0, 120.0, 16.0, s), &title);
-                draw_text(ctx, "\u{E70E}", &self.fmt_icon_sm, scaled_rect(x + w - 38.0, cy - 10.0, 20.0, 20.0, s), &sub);
+                draw_text(
+                    ctx,
+                    &p.date,
+                    &self.fmt_time_right,
+                    scaled_rect(right - 120.0, cy - 15.0, 120.0, 14.0, s),
+                    &sub,
+                );
+                draw_text(
+                    ctx,
+                    &p.time,
+                    &self.fmt_pill_time,
+                    scaled_rect(right - 120.0, cy - 1.0, 120.0, 16.0, s),
+                    &title,
+                );
+                draw_text(
+                    ctx,
+                    "\u{E70E}",
+                    &self.fmt_icon_sm,
+                    scaled_rect(x + w - 38.0, cy - 10.0, 20.0, 20.0, s),
+                    &sub,
+                );
             }
 
             let ctx = &self.ctx;
@@ -1916,35 +2065,107 @@ impl Renderer {
             .enumerate()
             {
                 let tx = pad + index as f32 * 184.0;
-                draw_glass(ctx, scaled_rect(tx, 46.0, 176.0, 30.0, s), 10.0 * s, 1.0, Glass::Tile, s)?;
-                draw_icon_badge(ctx, &self.fmt_icon_sm, glyph, tx + 16.0, 61.0, 11.0, on, s, 1.0)?;
-                draw_text(ctx, name, &self.fmt_pill_title, scaled_rect(tx + 34.0, 46.0, 80.0, 30.0, s), &primary);
+                draw_glass(
+                    ctx,
+                    scaled_rect(tx, 46.0, 176.0, 30.0, s),
+                    10.0 * s,
+                    1.0,
+                    Glass::Tile,
+                    s,
+                )?;
+                draw_icon_badge(
+                    ctx,
+                    &self.fmt_icon_sm,
+                    glyph,
+                    tx + 16.0,
+                    61.0,
+                    11.0,
+                    on,
+                    s,
+                    1.0,
+                )?;
+                draw_text(
+                    ctx,
+                    name,
+                    &self.fmt_pill_title,
+                    scaled_rect(tx + 34.0, 46.0, 80.0, 30.0, s),
+                    &primary,
+                );
                 let state_brush = solid(
                     ctx,
-                    &theme::rgb(if on { theme::accent::c400() } else { theme::accent::muted() }, 1.0),
+                    &theme::rgb(
+                        if on {
+                            theme::accent::c400()
+                        } else {
+                            theme::accent::muted()
+                        },
+                        1.0,
+                    ),
                 )?;
-                draw_text(ctx, state, &self.fmt_small, scaled_rect(tx + 108.0, 46.0, 64.0, 30.0, s), &state_brush);
+                draw_text(
+                    ctx,
+                    state,
+                    &self.fmt_small,
+                    scaled_rect(tx + 108.0, 46.0, 64.0, 30.0, s),
+                    &state_brush,
+                );
             }
 
-            draw_text(ctx, "\u{E767}", &self.fmt_icon_sm, scaled_rect(pad, 80.0, 16.0, 16.0, s), &secondary);
-            draw_text(ctx, "Audio", &self.fmt_label, scaled_rect(pad + 22.0, 80.0, 160.0, 14.0, s), &primary);
+            draw_text(
+                ctx,
+                "\u{E767}",
+                &self.fmt_icon_sm,
+                scaled_rect(pad, 80.0, 16.0, 16.0, s),
+                &secondary,
+            );
+            draw_text(
+                ctx,
+                "Audio",
+                &self.fmt_label,
+                scaled_rect(pad + 22.0, 80.0, 160.0, 14.0, s),
+                &primary,
+            );
             let volume_text = if p.muted {
                 "Muted".to_string()
             } else {
                 format!("{:.0}%", p.volume * 100.0)
             };
-            draw_text(ctx, &volume_text, &self.fmt_value, scaled_rect(232.0, 80.0, 160.0, 14.0, s), &primary);
+            draw_text(
+                ctx,
+                &volume_text,
+                &self.fmt_value,
+                scaled_rect(232.0, 80.0, 160.0, 14.0, s),
+                &primary,
+            );
             let vol = if p.muted { 0.0 } else { p.volume };
             draw_slider(ctx, pad, 103.0, 360.0, vol, true, s, 1.0)?;
 
-            draw_text(ctx, "\u{E706}", &self.fmt_icon_sm, scaled_rect(pad, 126.0, 16.0, 16.0, s), &secondary);
-            draw_text(ctx, "Brightness", &self.fmt_label, scaled_rect(pad + 22.0, 126.0, 180.0, 14.0, s), &primary);
+            draw_text(
+                ctx,
+                "\u{E706}",
+                &self.fmt_icon_sm,
+                scaled_rect(pad, 126.0, 16.0, 16.0, s),
+                &secondary,
+            );
+            draw_text(
+                ctx,
+                "Brightness",
+                &self.fmt_label,
+                scaled_rect(pad + 22.0, 126.0, 180.0, 14.0, s),
+                &primary,
+            );
             let bright = if p.has_brightness {
                 format!("{:.0}%", p.brightness * 100.0)
             } else {
                 "N/A".to_string()
             };
-            draw_text(ctx, &bright, &self.fmt_value, scaled_rect(232.0, 126.0, 160.0, 14.0, s), &primary);
+            draw_text(
+                ctx,
+                &bright,
+                &self.fmt_value,
+                scaled_rect(232.0, 126.0, 160.0, 14.0, s),
+                &primary,
+            );
             draw_slider(
                 ctx,
                 pad,
@@ -1968,10 +2189,34 @@ impl Renderer {
             );
 
             for (rect, glyph, label, active, glyph_color) in [
-                (hits.focus, "\u{E7E8}", "Focus Mode", p.focus_running, theme::accent::c400()),
-                (hits.battery, "\u{EBA6}", "Battery Saver", false, theme::color::SUCCESS),
-                (hits.record, "\u{E7C8}", "Screen Record", false, theme::color::DANGER),
-                (hits.theme, "\u{E790}", "Theme", false, theme::accent::c300()),
+                (
+                    hits.focus,
+                    "\u{E7E8}",
+                    "Focus Mode",
+                    p.focus_running,
+                    theme::accent::c400(),
+                ),
+                (
+                    hits.battery,
+                    "\u{EBA6}",
+                    "Battery Saver",
+                    false,
+                    theme::color::SUCCESS,
+                ),
+                (
+                    hits.record,
+                    "\u{E7C8}",
+                    "Screen Record",
+                    false,
+                    theme::color::DANGER,
+                ),
+                (
+                    hits.theme,
+                    "\u{E790}",
+                    "Theme",
+                    false,
+                    theme::accent::c300(),
+                ),
             ] {
                 let rr = D2D1_ROUNDED_RECT {
                     rect: scaled_rect(rect.x, rect.y, rect.w, rect.h, s),
@@ -2013,8 +2258,20 @@ impl Renderer {
                 );
             }
             let folder = solid(ctx, &theme::rgb(theme::color::WARNING, 1.0))?;
-            draw_text(ctx, "\u{E8B7}", &self.fmt_icon_sm, scaled_rect(pad, 366.0, 16.0, 20.0, s), &folder);
-            draw_text(ctx, "File Shelf", &self.fmt_card_title, scaled_rect(pad + 22.0, 366.0, 220.0, 20.0, s), &primary);
+            draw_text(
+                ctx,
+                "\u{E8B7}",
+                &self.fmt_icon_sm,
+                scaled_rect(pad, 366.0, 16.0, 20.0, s),
+                &folder,
+            );
+            draw_text(
+                ctx,
+                "File Shelf",
+                &self.fmt_card_title,
+                scaled_rect(pad + 22.0, 366.0, 220.0, 20.0, s),
+                &primary,
+            );
             let clear_brush = solid(ctx, &theme::rgb(theme::accent::muted(), 1.0))?;
             draw_text(
                 ctx,
@@ -2052,8 +2309,20 @@ impl Renderer {
                     _ => theme::color::INFO,
                 };
                 let file_brush = solid(ctx, &theme::rgb(file_color, 1.0))?;
-                draw_text(ctx, "\u{E8A5}", &self.fmt_icon_sm, scaled_rect(row.x, row.y, 16.0, row.h, s), &file_brush);
-                draw_text(ctx, &name, &self.fmt_small, scaled_rect(row.x + 22.0, row.y, row.w - 70.0, row.h, s), &primary);
+                draw_text(
+                    ctx,
+                    "\u{E8A5}",
+                    &self.fmt_icon_sm,
+                    scaled_rect(row.x, row.y, 16.0, row.h, s),
+                    &file_brush,
+                );
+                draw_text(
+                    ctx,
+                    &name,
+                    &self.fmt_small,
+                    scaled_rect(row.x + 22.0, row.y, row.w - 70.0, row.h, s),
+                    &primary,
+                );
                 draw_text(
                     ctx,
                     "OPEN",
@@ -2077,7 +2346,8 @@ impl Renderer {
         if hub.is_some() {
             unsafe {
                 self.ctx.PopAxisAlignedClip();
-                self.ctx.SetTransform(&windows_numerics::Matrix3x2::identity());
+                self.ctx
+                    .SetTransform(&windows_numerics::Matrix3x2::identity());
             }
         }
         Ok(())
@@ -2094,7 +2364,13 @@ impl Renderer {
             let secondary = solid(ctx, &theme::rgb(theme::accent::text2(), 1.0))?;
             let muted = solid(ctx, &theme::rgb(theme::accent::muted(), 1.0))?;
             let (x, y) = (card.x, card.y);
-            draw_text(ctx, "AI Developer Cockpit", &self.fmt_card_title, scaled_rect(x + 20.0, y + 12.0, 240.0, 22.0, s), &primary);
+            draw_text(
+                ctx,
+                "AI Developer Cockpit",
+                &self.fmt_card_title,
+                scaled_rect(x + 20.0, y + 12.0, 240.0, 22.0, s),
+                &primary,
+            );
 
             let configured = ai.configured();
             let (status, color) = if !configured {
@@ -2107,11 +2383,26 @@ impl Renderer {
             let chip = scaled_rect(x + card.w - 84.0, y + 13.0, 64.0, 22.0, s);
             draw_glass(ctx, chip, 11.0 * s, 1.0, Glass::Tile, s)?;
             let dot = solid(ctx, &theme::rgb(color, 1.0))?;
-            ctx.FillEllipse(&circle((x + card.w - 72.0) * s, (y + 24.0) * s, 3.5 * s), &dot);
-            draw_text(ctx, status, &self.fmt_tab, scaled_rect(x + card.w - 64.0, y + 13.0, 44.0, 22.0, s), &secondary);
+            ctx.FillEllipse(
+                &circle((x + card.w - 72.0) * s, (y + 24.0) * s, 3.5 * s),
+                &dot,
+            );
+            draw_text(
+                ctx,
+                status,
+                &self.fmt_tab,
+                scaled_rect(x + card.w - 64.0, y + 13.0, 44.0, 22.0, s),
+                &secondary,
+            );
 
             if !configured {
-                draw_text(ctx, "Add an admin key to track spend:", &self.fmt_small, scaled_rect(x + 20.0, y + 48.0, card.w - 40.0, 16.0, s), &muted);
+                draw_text(
+                    ctx,
+                    "Add an admin key to track spend:",
+                    &self.fmt_small,
+                    scaled_rect(x + 20.0, y + 48.0, card.w - 40.0, 16.0, s),
+                    &muted,
+                );
                 for (i, line) in [
                     "notch key set claude sk-ant-admin…",
                     "notch key set openai sk-admin-…",
@@ -2121,9 +2412,21 @@ impl Renderer {
                 .iter()
                 .enumerate()
                 {
-                    draw_text(ctx, line, &self.fmt_small, scaled_rect(x + 20.0, y + 74.0 + i as f32 * 22.0, card.w - 40.0, 18.0, s), &secondary);
+                    draw_text(
+                        ctx,
+                        line,
+                        &self.fmt_small,
+                        scaled_rect(x + 20.0, y + 74.0 + i as f32 * 22.0, card.w - 40.0, 18.0, s),
+                        &secondary,
+                    );
                 }
-                draw_text(ctx, "Keys stay in Windows Credential Manager.", &self.fmt_small, scaled_rect(x + 20.0, y + 168.0, card.w - 40.0, 16.0, s), &muted);
+                draw_text(
+                    ctx,
+                    "Keys stay in Windows Credential Manager.",
+                    &self.fmt_small,
+                    scaled_rect(x + 20.0, y + 168.0, card.w - 40.0, 16.0, s),
+                    &muted,
+                );
                 return Ok(());
             }
 
@@ -2133,8 +2436,21 @@ impl Renderer {
             for (i, (provider, stat)) in ai.stats.iter().enumerate().take(3) {
                 let tx = x + 20.0 + i as f32 * (tile_w + gap);
                 let ty = y + 44.0;
-                draw_glass(ctx, scaled_rect(tx, ty, tile_w, 66.0, s), 12.0 * s, 1.0, Glass::Tile, s)?;
-                draw_text(ctx, provider.label(), &self.fmt_small, scaled_rect(tx + 10.0, ty + 6.0, tile_w - 20.0, 16.0, s), &muted);
+                draw_glass(
+                    ctx,
+                    scaled_rect(tx, ty, tile_w, 66.0, s),
+                    12.0 * s,
+                    1.0,
+                    Glass::Tile,
+                    s,
+                )?;
+                draw_text(
+                    ctx,
+                    provider.label(),
+                    &self.fmt_small,
+                    scaled_rect(tx + 10.0, ty + 6.0, tile_w - 20.0, 16.0, s),
+                    &muted,
+                );
                 let value = if !stat.configured {
                     "—".to_string()
                 } else if let Some(cost) = stat.cost {
@@ -2144,7 +2460,13 @@ impl Renderer {
                 } else {
                     "…".to_string()
                 };
-                draw_text(ctx, &value, &self.fmt_wide_title, scaled_rect(tx + 10.0, ty + 24.0, tile_w - 20.0, 20.0, s), &primary);
+                draw_text(
+                    ctx,
+                    &value,
+                    &self.fmt_wide_title,
+                    scaled_rect(tx + 10.0, ty + 24.0, tile_w - 20.0, 20.0, s),
+                    &primary,
+                );
                 let (sub, sub_brush) = if !stat.configured {
                     ("no key".to_string(), &muted)
                 } else if let Some(err) = &stat.error {
@@ -2158,9 +2480,21 @@ impl Renderer {
                 };
                 if stat.error.is_some() && stat.configured {
                     let warn = solid(ctx, &theme::rgb(theme::color::WARNING, 1.0))?;
-                    draw_text(ctx, &sub, &self.fmt_small, scaled_rect(tx + 10.0, ty + 46.0, tile_w - 16.0, 14.0, s), &warn);
+                    draw_text(
+                        ctx,
+                        &sub,
+                        &self.fmt_small,
+                        scaled_rect(tx + 10.0, ty + 46.0, tile_w - 16.0, 14.0, s),
+                        &warn,
+                    );
                 } else {
-                    draw_text(ctx, &sub, &self.fmt_small, scaled_rect(tx + 10.0, ty + 46.0, tile_w - 16.0, 14.0, s), sub_brush);
+                    draw_text(
+                        ctx,
+                        &sub,
+                        &self.fmt_small,
+                        scaled_rect(tx + 10.0, ty + 46.0, tile_w - 16.0, 14.0, s),
+                        sub_brush,
+                    );
                 }
             }
 
@@ -2170,16 +2504,41 @@ impl Renderer {
             let bar_y = y + 122.0;
             if ai.budget > 0.0 {
                 let ratio = (total / ai.budget) as f32;
-                draw_slider(ctx, x + 20.0, bar_y, card.w - 40.0, ratio.min(1.0), false, s, 1.0)?;
-                let label = format!("{:.0}% of ${:.0} budget  ·  ${total:.2}", ratio * 100.0, ai.budget);
+                draw_slider(
+                    ctx,
+                    x + 20.0,
+                    bar_y,
+                    card.w - 40.0,
+                    ratio.min(1.0),
+                    false,
+                    s,
+                    1.0,
+                )?;
+                let label = format!(
+                    "{:.0}% of ${:.0} budget  ·  ${total:.2}",
+                    ratio * 100.0,
+                    ai.budget
+                );
                 let brush = if ratio >= 1.0 {
                     solid(ctx, &theme::rgb(theme::color::DANGER, 1.0))?
                 } else {
                     primary.clone()
                 };
-                draw_text(ctx, &label, &self.fmt_small, scaled_rect(x + 20.0, bar_y + 8.0, card.w - 140.0, 16.0, s), &brush);
+                draw_text(
+                    ctx,
+                    &label,
+                    &self.fmt_small,
+                    scaled_rect(x + 20.0, bar_y + 8.0, card.w - 140.0, 16.0, s),
+                    &brush,
+                );
             } else {
-                draw_text(ctx, &format!("Month to date  ${total:.2}"), &self.fmt_small, scaled_rect(x + 20.0, bar_y + 2.0, card.w - 140.0, 16.0, s), &primary);
+                draw_text(
+                    ctx,
+                    &format!("Month to date  ${total:.2}"),
+                    &self.fmt_small,
+                    scaled_rect(x + 20.0, bar_y + 2.0, card.w - 140.0, 16.0, s),
+                    &primary,
+                );
             }
             draw_text(
                 ctx,
@@ -2190,7 +2549,15 @@ impl Renderer {
             );
 
             // Daily spend sparkline.
-            draw_sparkline(ctx, &ai.daily(), x + 20.0, y + 152.0, card.w - 40.0, 44.0, s)?;
+            draw_sparkline(
+                ctx,
+                &ai.daily(),
+                x + 20.0,
+                y + 152.0,
+                card.w - 40.0,
+                44.0,
+                s,
+            )?;
         }
         Ok(())
     }
@@ -2238,37 +2605,134 @@ impl Renderer {
 
             // Launcher.
             let l = hub::launcher();
-            draw_glass(ctx, scaled_rect(l.x + 12.0, l.y + 14.0, l.w - 24.0, 40.0, s), 12.0 * s, 1.0, Glass::Tile, s)?;
-            draw_text(ctx, "\u{E721}", &self.fmt_icon_sm, scaled_rect(l.x + 24.0, l.y + 14.0, 20.0, 40.0, s), &secondary);
-            draw_text(ctx, "Apps", &self.fmt_card_title, scaled_rect(l.x + 52.0, l.y + 14.0, 160.0, 40.0, s), &primary);
-            draw_text(ctx, "pinned", &self.fmt_small, scaled_rect(l.x + 100.0, l.y + 14.0, 120.0, 40.0, s), &muted);
+            draw_glass(
+                ctx,
+                scaled_rect(l.x + 12.0, l.y + 14.0, l.w - 24.0, 40.0, s),
+                12.0 * s,
+                1.0,
+                Glass::Tile,
+                s,
+            )?;
+            draw_text(
+                ctx,
+                "\u{E721}",
+                &self.fmt_icon_sm,
+                scaled_rect(l.x + 24.0, l.y + 14.0, 20.0, 40.0, s),
+                &secondary,
+            );
+            draw_text(
+                ctx,
+                "Apps",
+                &self.fmt_card_title,
+                scaled_rect(l.x + 52.0, l.y + 14.0, 160.0, 40.0, s),
+                &primary,
+            );
+            draw_text(
+                ctx,
+                "pinned",
+                &self.fmt_small,
+                scaled_rect(l.x + 100.0, l.y + 14.0, 120.0, 40.0, s),
+                &muted,
+            );
             if p.apps.is_empty() {
-                draw_text(ctx, "No pinned apps found.", &self.fmt_body, scaled_rect(l.x + 24.0, l.y + 80.0, 280.0, 20.0, s), &muted);
+                draw_text(
+                    ctx,
+                    "No pinned apps found.",
+                    &self.fmt_body,
+                    scaled_rect(l.x + 24.0, l.y + 80.0, 280.0, 20.0, s),
+                    &muted,
+                );
             }
             for (index, name) in p.apps.iter().take(hub::app_rows()).enumerate() {
                 let row = hub::app_row(index);
                 let cy = row.y + row.h * 0.5;
-                let initial: String = name.chars().next().map(|c| c.to_uppercase().collect()).unwrap_or_default();
-                draw_glass(ctx, scaled_rect(row.x, row.y + 6.0, 40.0, 40.0, s), 10.0 * s, 1.0, Glass::Tile, s)?;
-                draw_text(ctx, &initial, &self.fmt_card_title_center, scaled_rect(row.x, row.y + 6.0, 40.0, 40.0, s), &accent);
-                draw_text(ctx, name, &self.fmt_wide_title, scaled_rect(row.x + 54.0, cy - 17.0, row.w - 60.0, 18.0, s), &primary);
-                draw_text(ctx, "App", &self.fmt_wide_sub, scaled_rect(row.x + 54.0, cy + 2.0, 120.0, 16.0, s), &muted);
+                let initial: String = name
+                    .chars()
+                    .next()
+                    .map(|c| c.to_uppercase().collect())
+                    .unwrap_or_default();
+                draw_glass(
+                    ctx,
+                    scaled_rect(row.x, row.y + 6.0, 40.0, 40.0, s),
+                    10.0 * s,
+                    1.0,
+                    Glass::Tile,
+                    s,
+                )?;
+                draw_text(
+                    ctx,
+                    &initial,
+                    &self.fmt_card_title_center,
+                    scaled_rect(row.x, row.y + 6.0, 40.0, 40.0, s),
+                    &accent,
+                );
+                draw_text(
+                    ctx,
+                    name,
+                    &self.fmt_wide_title,
+                    scaled_rect(row.x + 54.0, cy - 17.0, row.w - 60.0, 18.0, s),
+                    &primary,
+                );
+                draw_text(
+                    ctx,
+                    "App",
+                    &self.fmt_wide_sub,
+                    scaled_rect(row.x + 54.0, cy + 2.0, 120.0, 16.0, s),
+                    &muted,
+                );
             }
 
             // Clipboard.
             let c = hub::clip();
-            draw_text(ctx, "Clipboard", &self.fmt_card_title, scaled_rect(c.x + 20.0, c.y + 12.0, 200.0, 22.0, s), &primary);
+            draw_text(
+                ctx,
+                "Clipboard",
+                &self.fmt_card_title,
+                scaled_rect(c.x + 20.0, c.y + 12.0, 200.0, 22.0, s),
+                &primary,
+            );
             let clear = hub::clip_clear();
-            draw_glass(ctx, scaled_rect(clear.x, clear.y, clear.w, clear.h, s), 8.0 * s, 1.0, Glass::Tile, s)?;
-            draw_text(ctx, "Clear all", &self.fmt_tab, scaled_rect(clear.x, clear.y, clear.w, clear.h, s), &secondary);
+            draw_glass(
+                ctx,
+                scaled_rect(clear.x, clear.y, clear.w, clear.h, s),
+                8.0 * s,
+                1.0,
+                Glass::Tile,
+                s,
+            )?;
+            draw_text(
+                ctx,
+                "Clear all",
+                &self.fmt_tab,
+                scaled_rect(clear.x, clear.y, clear.w, clear.h, s),
+                &secondary,
+            );
             if p.clip_items.is_empty() {
-                draw_text(ctx, "Copy something to see it here.", &self.fmt_body, scaled_rect(c.x + 20.0, c.y + 52.0, 300.0, 20.0, s), &muted);
+                draw_text(
+                    ctx,
+                    "Copy something to see it here.",
+                    &self.fmt_body,
+                    scaled_rect(c.x + 20.0, c.y + 52.0, 300.0, 20.0, s),
+                    &muted,
+                );
             }
             for (index, text) in p.clip_items.iter().take(hub::CLIP_ROWS).enumerate() {
                 let row = hub::clip_row(index);
                 let line: String = text.split_whitespace().collect::<Vec<_>>().join(" ");
-                draw_text(ctx, "\u{E77F}", &self.fmt_icon_sm, scaled_rect(row.x, row.y, 20.0, row.h, s), &accent);
-                draw_text(ctx, &line, &self.fmt_body, scaled_rect(row.x + 28.0, row.y, row.w - 28.0, row.h, s), &primary);
+                draw_text(
+                    ctx,
+                    "\u{E77F}",
+                    &self.fmt_icon_sm,
+                    scaled_rect(row.x, row.y, 20.0, row.h, s),
+                    &accent,
+                );
+                draw_text(
+                    ctx,
+                    &line,
+                    &self.fmt_body,
+                    scaled_rect(row.x + 28.0, row.y, row.w - 28.0, row.h, s),
+                    &primary,
+                );
             }
 
             // Media + system.
@@ -2285,37 +2749,88 @@ impl Renderer {
             } else {
                 ("Nothing playing", "Play something to control it here")
             };
-            draw_text(ctx, title, &self.fmt_wide_title, scaled_rect(m.x + 124.0, m.y + 20.0, 176.0, 20.0, s), &primary);
-            draw_text(ctx, artist, &self.fmt_wide_sub, scaled_rect(m.x + 124.0, m.y + 42.0, 176.0, 16.0, s), &secondary);
+            draw_text(
+                ctx,
+                title,
+                &self.fmt_wide_title,
+                scaled_rect(m.x + 124.0, m.y + 20.0, 176.0, 20.0, s),
+                &primary,
+            );
+            draw_text(
+                ctx,
+                artist,
+                &self.fmt_wide_sub,
+                scaled_rect(m.x + 124.0, m.y + 42.0, 176.0, 16.0, s),
+                &secondary,
+            );
             let (prev, play, next) = (hub::prev(), hub::play(), hub::next());
-            draw_text(ctx, "\u{E892}", &self.fmt_icon, scaled_rect(prev.x, prev.y, prev.w, prev.h, s), &secondary);
+            draw_text(
+                ctx,
+                "\u{E892}",
+                &self.fmt_icon,
+                scaled_rect(prev.x, prev.y, prev.w, prev.h, s),
+                &secondary,
+            );
             let disc = violet_gradient(ctx, &scaled_rect(play.x, play.y, play.w, play.h, s), 1.0)?;
-            ctx.FillEllipse(&circle((play.x + play.w * 0.5) * s, (play.y + play.h * 0.5) * s, play.w * 0.5 * s), &disc);
+            ctx.FillEllipse(
+                &circle(
+                    (play.x + play.w * 0.5) * s,
+                    (play.y + play.h * 0.5) * s,
+                    play.w * 0.5 * s,
+                ),
+                &disc,
+            );
             let white = solid(ctx, &theme::rgb(0xFFFFFF, 1.0))?;
             draw_text(
                 ctx,
-                if p.media.playing { "\u{E769}" } else { "\u{E768}" },
+                if p.media.playing {
+                    "\u{E769}"
+                } else {
+                    "\u{E768}"
+                },
                 &self.fmt_icon,
                 scaled_rect(play.x, play.y, play.w, play.h, s),
                 &white,
             );
-            draw_text(ctx, "\u{E893}", &self.fmt_icon, scaled_rect(next.x, next.y, next.w, next.h, s), &secondary);
+            draw_text(
+                ctx,
+                "\u{E893}",
+                &self.fmt_icon,
+                scaled_rect(next.x, next.y, next.w, next.h, s),
+                &secondary,
+            );
             let bar = hub::progress();
             let ratio = if p.media.duration > 0.0 {
                 (p.media.position / p.media.duration).clamp(0.0, 1.0)
             } else {
                 0.0
             };
-            draw_slider(ctx, bar.x, bar.y + 7.0, bar.w, ratio, p.media.available, s, 1.0)?;
+            draw_slider(
+                ctx,
+                bar.x,
+                bar.y + 7.0,
+                bar.w,
+                ratio,
+                p.media.available,
+                s,
+                1.0,
+            )?;
             draw_text(
                 ctx,
-                &format!("{} / {}", format_time(p.media.position), format_time(p.media.duration)),
+                &format!(
+                    "{} / {}",
+                    format_time(p.media.position),
+                    format_time(p.media.duration)
+                ),
                 &self.fmt_small,
                 scaled_rect(bar.x, bar.y + 20.0, bar.w, 16.0, s),
                 &muted,
             );
             let divider = solid(ctx, &theme::rgb(theme::accent::light(), 0.08))?;
-            ctx.FillRectangle(&scaled_rect(m.x + 312.0, m.y + 20.0, 1.0, m.h - 40.0, s), &divider);
+            ctx.FillRectangle(
+                &scaled_rect(m.x + 312.0, m.y + 20.0, 1.0, m.h - 40.0, s),
+                &divider,
+            );
             let battery = p.battery.map(|b| b as f32).unwrap_or(0.0);
             let rings = [
                 ("CPU", p.cpu.clamp(0.0, 100.0), format!("{:.0}%", p.cpu)),
@@ -2323,14 +2838,20 @@ impl Renderer {
                 (
                     if p.charging { "POWER" } else { "BATT" },
                     battery,
-                    p.battery.map(|b| format!("{b}%")).unwrap_or_else(|| "N/A".into()),
+                    p.battery
+                        .map(|b| format!("{b}%"))
+                        .unwrap_or_else(|| "N/A".into()),
                 ),
             ];
             for (index, (label, value, text)) in rings.iter().enumerate() {
                 let cx = m.x + 340.0 + index as f32 * 46.0;
                 let cy = m.y + 66.0;
                 let color = if index == 2 {
-                    if *value <= 15.0 { theme::color::DANGER } else { theme::accent::battery() }
+                    if *value <= 15.0 {
+                        theme::color::DANGER
+                    } else {
+                        theme::accent::battery()
+                    }
                 } else if *value >= theme::metric::DANGER_THRESHOLD {
                     theme::color::DANGER
                 } else if *value >= theme::metric::WARNING_THRESHOLD {
@@ -2338,16 +2859,56 @@ impl Renderer {
                 } else {
                     theme::accent::c600()
                 };
-                draw_ring(ctx, cx, cy, 17.0, 3.5, value / 100.0, &theme::rgb(color, 1.0), s, 1.0)?;
-                draw_text(ctx, text, &self.fmt_tab, scaled_rect(cx - 17.0, cy - 8.0, 34.0, 16.0, s), &primary);
-                draw_text(ctx, label, &self.fmt_tab, scaled_rect(cx - 22.0, cy + 22.0, 44.0, 14.0, s), &muted);
+                draw_ring(
+                    ctx,
+                    cx,
+                    cy,
+                    17.0,
+                    3.5,
+                    value / 100.0,
+                    &theme::rgb(color, 1.0),
+                    s,
+                    1.0,
+                )?;
+                draw_text(
+                    ctx,
+                    text,
+                    &self.fmt_tab,
+                    scaled_rect(cx - 17.0, cy - 8.0, 34.0, 16.0, s),
+                    &primary,
+                );
+                draw_text(
+                    ctx,
+                    label,
+                    &self.fmt_tab,
+                    scaled_rect(cx - 22.0, cy + 22.0, 44.0, 14.0, s),
+                    &muted,
+                );
             }
-            draw_text(ctx, &p.date, &self.fmt_small, scaled_rect(m.x + 326.0, m.y + 120.0, 124.0, 16.0, s), &secondary);
-            draw_text(ctx, &p.time, &self.fmt_card_title, scaled_rect(m.x + 326.0, m.y + 138.0, 124.0, 24.0, s), &primary);
+            draw_text(
+                ctx,
+                &p.date,
+                &self.fmt_small,
+                scaled_rect(m.x + 326.0, m.y + 120.0, 124.0, 16.0, s),
+                &secondary,
+            );
+            draw_text(
+                ctx,
+                &p.time,
+                &self.fmt_card_title,
+                scaled_rect(m.x + 326.0, m.y + 138.0, 124.0, 24.0, s),
+                &primary,
+            );
 
             // Focus.
             let f = hub::focus();
-            draw_text(ctx, "Focus", &self.fmt_card_title, scaled_rect(f.x + 20.0, f.y + 12.0, 120.0, 22.0, s), &primary);
+            draw_text(
+                ctx,
+                "Focus",
+                &self.fmt_card_title,
+                scaled_rect(f.x + 20.0, f.y + 12.0, 120.0, 22.0, s),
+                &primary,
+            );
             draw_text(
                 ctx,
                 if p.focus_running { "Running" } else { "Paused" },
@@ -2364,40 +2925,116 @@ impl Renderer {
                 &primary,
             );
             for (rect, label) in [
-                (hub::focus_toggle(), if p.focus_running { "Pause" } else { "Start" }),
+                (
+                    hub::focus_toggle(),
+                    if p.focus_running { "Pause" } else { "Start" },
+                ),
                 (hub::focus_reset(), "Reset"),
             ] {
-                draw_glass(ctx, scaled_rect(rect.x, rect.y, rect.w, rect.h, s), 10.0 * s, 1.0, Glass::Tile, s)?;
-                draw_text(ctx, label, &self.fmt_tab, scaled_rect(rect.x, rect.y, rect.w, rect.h, s), &primary);
+                draw_glass(
+                    ctx,
+                    scaled_rect(rect.x, rect.y, rect.w, rect.h, s),
+                    10.0 * s,
+                    1.0,
+                    Glass::Tile,
+                    s,
+                )?;
+                draw_text(
+                    ctx,
+                    label,
+                    &self.fmt_tab,
+                    scaled_rect(rect.x, rect.y, rect.w, rect.h, s),
+                    &primary,
+                );
             }
-            draw_slider(ctx, f.x + 20.0, f.y + 124.0, f.w - 40.0, 1.0 - p.focus_remaining / 1500.0, false, s, 1.0)?;
+            draw_slider(
+                ctx,
+                f.x + 20.0,
+                f.y + 124.0,
+                f.w - 40.0,
+                1.0 - p.focus_remaining / 1500.0,
+                false,
+                s,
+                1.0,
+            )?;
 
             // AI Developer Cockpit.
             self.draw_ai_card(p, hub::ai(), s)?;
 
             // Live Activities, under the media card.
             if let Some(card) = hub::activities(p.activities.len()) {
-                draw_glass(ctx, scaled_rect(card.x, card.y, card.w, card.h, s), 20.0 * s, p.opacity, Glass::Card, s)?;
-                draw_text(ctx, "Live Activities", &self.fmt_card_title, scaled_rect(card.x + 20.0, card.y + 12.0, 200.0, 22.0, s), &primary);
+                draw_glass(
+                    ctx,
+                    scaled_rect(card.x, card.y, card.w, card.h, s),
+                    20.0 * s,
+                    p.opacity,
+                    Glass::Card,
+                    s,
+                )?;
+                draw_text(
+                    ctx,
+                    "Live Activities",
+                    &self.fmt_card_title,
+                    scaled_rect(card.x + 20.0, card.y + 12.0, 200.0, 22.0, s),
+                    &primary,
+                );
                 if p.privacy.active() {
                     let warn = solid(ctx, &theme::rgb(theme::color::WARNING, 1.0))?;
-                    draw_text(ctx, &p.privacy.label(), &self.fmt_small, scaled_rect(card.x + 180.0, card.y + 12.0, card.w - 200.0, 22.0, s), &warn);
+                    draw_text(
+                        ctx,
+                        &p.privacy.label(),
+                        &self.fmt_small,
+                        scaled_rect(card.x + 180.0, card.y + 12.0, card.w - 200.0, 22.0, s),
+                        &warn,
+                    );
                 }
                 for (index, activity) in p.activities.iter().enumerate() {
                     let row = hub::activity_row(index);
-                    draw_activity_row(ctx, &self.fmt_icon_sm, &self.fmt_wide_title, &self.fmt_small, activity, row, s)?;
+                    draw_activity_row(
+                        ctx,
+                        &self.fmt_icon_sm,
+                        &self.fmt_wide_title,
+                        &self.fmt_small,
+                        activity,
+                        row,
+                        s,
+                    )?;
                 }
             }
 
             // Dock.
             let docked = p.apps.len().min(hub::DOCK_MAX);
             if let Some(dock) = hub::dock(docked) {
-                draw_glass(ctx, scaled_rect(dock.x, dock.y, dock.w, dock.h, s), 22.0 * s, p.opacity, Glass::Card, s)?;
+                draw_glass(
+                    ctx,
+                    scaled_rect(dock.x, dock.y, dock.w, dock.h, s),
+                    22.0 * s,
+                    p.opacity,
+                    Glass::Card,
+                    s,
+                )?;
                 for (index, name) in p.apps.iter().take(docked).enumerate() {
                     let item = hub::dock_item(docked, index);
-                    let initial: String = name.chars().next().map(|c| c.to_uppercase().collect()).unwrap_or_default();
-                    draw_glass(ctx, scaled_rect(item.x, item.y, item.w, item.h, s), 14.0 * s, 1.0, Glass::Tile, s)?;
-                    draw_text(ctx, &initial, &self.fmt_card_title_center, scaled_rect(item.x, item.y, item.w, item.h, s), &accent);
+                    let initial: String = name
+                        .chars()
+                        .next()
+                        .map(|c| c.to_uppercase().collect())
+                        .unwrap_or_default();
+                    draw_glass(
+                        ctx,
+                        scaled_rect(item.x, item.y, item.w, item.h, s),
+                        14.0 * s,
+                        1.0,
+                        Glass::Tile,
+                        s,
+                    )?;
+                    draw_text(
+                        ctx,
+                        &initial,
+                        &self.fmt_card_title_center,
+                        scaled_rect(item.x, item.y, item.w, item.h, s),
+                        &accent,
+                    );
                 }
             }
 
@@ -2459,8 +3096,11 @@ fn decode_art(ctx: &ID2D1DeviceContext, bytes: &[u8]) -> Result<ID2D1Bitmap1> {
         let stream = factory.CreateStream()?;
         let buffer = bytes.to_vec();
         stream.InitializeFromMemory(&buffer)?;
-        let decoder =
-            factory.CreateDecoderFromStream(&stream, std::ptr::null(), WICDecodeMetadataCacheOnLoad)?;
+        let decoder = factory.CreateDecoderFromStream(
+            &stream,
+            std::ptr::null(),
+            WICDecodeMetadataCacheOnLoad,
+        )?;
         let frame = decoder.GetFrame(0)?;
         let converter = factory.CreateFormatConverter()?;
         converter.Initialize(
@@ -2650,8 +3290,14 @@ unsafe fn violet_gradient(
         D2D1_COLOR_INTERPOLATION_MODE_STRAIGHT,
     )?;
     let props = D2D1_LINEAR_GRADIENT_BRUSH_PROPERTIES {
-        startPoint: Vector2 { X: rect.left, Y: rect.top },
-        endPoint: Vector2 { X: rect.right, Y: rect.bottom },
+        startPoint: Vector2 {
+            X: rect.left,
+            Y: rect.top,
+        },
+        endPoint: Vector2 {
+            X: rect.right,
+            Y: rect.bottom,
+        },
     };
     ctx.CreateLinearGradientBrush(&props, None, &collection)
 }
@@ -2904,11 +3550,22 @@ unsafe fn draw_glass(
             theme::rgb(theme::accent::base(), g.body_bottom * opacity),
         )
     };
-    let body = linear(ctx, rect.left, rect.top, rect.left, rect.bottom, &[(0.0, top), (1.0, bottom)])?;
+    let body = linear(
+        ctx,
+        rect.left,
+        rect.top,
+        rect.left,
+        rect.bottom,
+        &[(0.0, top), (1.0, bottom)],
+    )?;
     ctx.FillRoundedRectangle(&rr(rect, radius), &body);
 
     // Diagonal sheen, strongest at the top-left corner.
-    let sheen_a = if kind == Glass::Tile { g.sheen * 0.5 } else { g.sheen };
+    let sheen_a = if kind == Glass::Tile {
+        g.sheen * 0.5
+    } else {
+        g.sheen
+    };
     let sheen = linear(
         ctx,
         rect.left,
@@ -2917,14 +3574,21 @@ unsafe fn draw_glass(
         rect.bottom,
         &[
             (0.0, theme::rgb(theme::accent::light(), sheen_a * opacity)),
-            (0.45, theme::rgb(theme::accent::light(), sheen_a * 0.25 * opacity)),
+            (
+                0.45,
+                theme::rgb(theme::accent::light(), sheen_a * 0.25 * opacity),
+            ),
             (1.0, theme::rgb(theme::accent::light(), 0.0)),
         ],
     )?;
     ctx.FillRoundedRectangle(&rr(rect, radius), &sheen);
 
     // Rim: bright on top, violet through the middle, fading at the bottom.
-    let rim_a = if kind == Glass::Tile { g.rim * 0.6 } else { g.rim };
+    let rim_a = if kind == Glass::Tile {
+        g.rim * 0.6
+    } else {
+        g.rim
+    };
     let rim = linear(
         ctx,
         rect.left,
@@ -2933,8 +3597,14 @@ unsafe fn draw_glass(
         rect.bottom,
         &[
             (0.0, theme::rgb(theme::accent::light(), rim_a * opacity)),
-            (0.5, theme::rgb(theme::accent::c500(), rim_a * 0.55 * opacity)),
-            (1.0, theme::rgb(theme::accent::light(), rim_a * 0.2 * opacity)),
+            (
+                0.5,
+                theme::rgb(theme::accent::c500(), rim_a * 0.55 * opacity),
+            ),
+            (
+                1.0,
+                theme::rgb(theme::accent::light(), rim_a * 0.2 * opacity),
+            ),
         ],
     )?;
     let inset = 0.5 * s;
@@ -3020,7 +3690,10 @@ unsafe fn draw_hardware(
         let p = |x: f32, y: f32| Vector2 { X: x, Y: y };
         let arc = |x: f32, y: f32, sweep| D2D1_ARC_SEGMENT {
             point: p(x, y),
-            size: D2D_SIZE_F { width: f, height: f },
+            size: D2D_SIZE_F {
+                width: f,
+                height: f,
+            },
             rotationAngle: 0.0,
             sweepDirection: sweep,
             arcSize: D2D1_ARC_SIZE_SMALL,
@@ -3102,7 +3775,13 @@ unsafe fn draw_activity_inline(
 ) -> Result<()> {
     let (glyph, color) = activity_glyph(activity.status);
     let icon = solid(ctx, &theme::rgb(color, alpha))?;
-    draw_text(ctx, glyph, fmt_icon, scaled_rect(left, top, 16.0, bottom - top, s), &icon);
+    draw_text(
+        ctx,
+        glyph,
+        fmt_icon,
+        scaled_rect(left, top, 16.0, bottom - top, s),
+        &icon,
+    );
     let title = solid(ctx, &theme::rgb(theme::accent::text1(), alpha))?;
     let label = match activity.progress {
         Some(p) if activity.status == crate::activity::Status::Running => {
@@ -3110,14 +3789,23 @@ unsafe fn draw_activity_inline(
         }
         _ => activity.title.clone(),
     };
-    draw_text(ctx, &label, fmt_title, scaled_rect(left + 20.0, top, right - left - 20.0, bottom - top, s), &title);
+    draw_text(
+        ctx,
+        &label,
+        fmt_title,
+        scaled_rect(left + 20.0, top, right - left - 20.0, bottom - top, s),
+        &title,
+    );
     if let Some(progress) = activity.progress {
         let bar_y = bottom - 6.0;
         let w = right - left - 20.0;
         let track = solid(ctx, &theme::rgb(theme::accent::track(), alpha))?;
         ctx.FillRectangle(&scaled_rect(left + 20.0, bar_y, w, 2.0, s), &track);
         let fill = solid(ctx, &theme::rgb(color, alpha))?;
-        ctx.FillRectangle(&scaled_rect(left + 20.0, bar_y, w * progress, 2.0, s), &fill);
+        ctx.FillRectangle(
+            &scaled_rect(left + 20.0, bar_y, w * progress, 2.0, s),
+            &fill,
+        );
     }
     Ok(())
 }
@@ -3133,20 +3821,48 @@ unsafe fn draw_activity_row(
     s: f32,
 ) -> Result<()> {
     let (glyph, color) = activity_glyph(activity.status);
-    draw_glass(ctx, scaled_rect(row.x, row.y + 4.0, 32.0, 32.0, s), 10.0 * s, 1.0, Glass::Tile, s)?;
+    draw_glass(
+        ctx,
+        scaled_rect(row.x, row.y + 4.0, 32.0, 32.0, s),
+        10.0 * s,
+        1.0,
+        Glass::Tile,
+        s,
+    )?;
     let icon = solid(ctx, &theme::rgb(color, 1.0))?;
-    draw_text(ctx, glyph, fmt_icon, scaled_rect(row.x, row.y + 4.0, 32.0, 32.0, s), &icon);
+    draw_text(
+        ctx,
+        glyph,
+        fmt_icon,
+        scaled_rect(row.x, row.y + 4.0, 32.0, 32.0, s),
+        &icon,
+    );
     let primary = solid(ctx, &theme::rgb(theme::accent::text1(), 1.0))?;
     let muted = solid(ctx, &theme::rgb(theme::accent::muted(), 1.0))?;
     let text_x = row.x + 44.0;
     let text_w = row.w - 44.0 - 52.0;
-    draw_text(ctx, &activity.title, fmt_title, scaled_rect(text_x, row.y + 2.0, text_w, 18.0, s), &primary);
-    let detail = activity.detail.clone().unwrap_or_else(|| match activity.status {
-        crate::activity::Status::Running => "Running".into(),
-        crate::activity::Status::Done => "Done".into(),
-        crate::activity::Status::Failed => "Failed".into(),
-    });
-    draw_text(ctx, &detail, fmt_small, scaled_rect(text_x, row.y + 20.0, text_w, 14.0, s), &muted);
+    draw_text(
+        ctx,
+        &activity.title,
+        fmt_title,
+        scaled_rect(text_x, row.y + 2.0, text_w, 18.0, s),
+        &primary,
+    );
+    let detail = activity
+        .detail
+        .clone()
+        .unwrap_or_else(|| match activity.status {
+            crate::activity::Status::Running => "Running".into(),
+            crate::activity::Status::Done => "Done".into(),
+            crate::activity::Status::Failed => "Failed".into(),
+        });
+    draw_text(
+        ctx,
+        &detail,
+        fmt_small,
+        scaled_rect(text_x, row.y + 20.0, text_w, 14.0, s),
+        &muted,
+    );
     if let Some(progress) = activity.progress {
         draw_text(
             ctx,
@@ -3155,7 +3871,16 @@ unsafe fn draw_activity_row(
             scaled_rect(row.x + row.w - 44.0, row.y + 2.0, 44.0, 18.0, s),
             &primary,
         );
-        draw_slider(ctx, text_x, row.y + 36.0, row.w - 44.0, progress, false, s, 1.0)?;
+        draw_slider(
+            ctx,
+            text_x,
+            row.y + 36.0,
+            row.w - 44.0,
+            progress,
+            false,
+            s,
+            1.0,
+        )?;
     }
     Ok(())
 }
