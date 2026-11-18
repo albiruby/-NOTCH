@@ -24,12 +24,15 @@ pub enum SurfaceMode {
 #[serde(rename_all = "lowercase")]
 pub enum Layout {
     /// Vertical panel with paged content.
-    #[default]
     Panel,
     /// One wide bar with media, metrics, and clock.
     Wide,
     /// Two floating cards: quick controls and file shelf.
     Cards,
+    /// Click the pill to open every widget at once (launcher, clipboard,
+    /// media + system, focus, quick controls, file shelf).
+    #[default]
+    Hub,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -67,6 +70,9 @@ impl Metrics {
                 (996.0, 188.0, 900.0, 140.0, 28.0)
             } else if layout == Layout::Cards {
                 (424.0, 568.0, 424.0, 568.0, 0.0)
+            } else if layout == Layout::Hub {
+                // The pill grows into a top bar; cards float beneath it.
+                (hub::W, hub::H, 620.0, 52.0, 26.0)
             } else {
                 // The expanded panel has a fixed content layout, so it never
                 // shrinks below the height that layout needs.
@@ -552,5 +558,75 @@ impl Spring {
         } else {
             true
         }
+    }
+}
+
+/// Geometry of the Hub overlay, in DIPs relative to the hub canvas.
+pub mod hub {
+    use super::Rect;
+
+    pub const W: f32 = 1240.0;
+    pub const H: f32 = 760.0;
+
+    const fn r(x: f32, y: f32, w: f32, h: f32) -> Rect {
+        Rect { x, y, w, h }
+    }
+
+    pub fn launcher() -> Rect {
+        r(16.0, 84.0, 340.0, 420.0)
+    }
+    pub fn clip() -> Rect {
+        r(16.0, 516.0, 340.0, 232.0)
+    }
+    pub fn media() -> Rect {
+        r(372.0, 84.0, 440.0, 190.0)
+    }
+    pub fn focus() -> Rect {
+        r(828.0, 84.0, 400.0, 150.0)
+    }
+    pub fn quick() -> Rect {
+        r(828.0, 246.0, 400.0, 330.0)
+    }
+    pub fn shelf() -> Rect {
+        r(828.0, 588.0, 400.0, 160.0)
+    }
+    pub fn cards() -> [Rect; 6] {
+        [launcher(), clip(), media(), focus(), quick(), shelf()]
+    }
+
+    /// Offsets that map the Cards-layout quick/shelf geometry into the hub.
+    pub const QUICK_OFFSET: (f32, f32) = (816.0, 234.0);
+    pub const SHELF_OFFSET: (f32, f32) = (816.0, 230.0);
+
+    pub const APP_ROWS: usize = 6;
+    pub fn app_row(index: usize) -> Rect {
+        r(28.0, 156.0 + index as f32 * 56.0, 316.0, 52.0)
+    }
+    pub const CLIP_ROWS: usize = 5;
+    pub fn clip_row(index: usize) -> Rect {
+        r(28.0, 556.0 + index as f32 * 36.0, 316.0, 34.0)
+    }
+    pub fn clip_clear() -> Rect {
+        r(272.0, 528.0, 72.0, 22.0)
+    }
+
+    pub fn prev() -> Rect {
+        r(492.0, 150.0, 36.0, 36.0)
+    }
+    pub fn play() -> Rect {
+        r(536.0, 150.0, 36.0, 36.0)
+    }
+    pub fn next() -> Rect {
+        r(580.0, 150.0, 36.0, 36.0)
+    }
+    pub fn progress() -> Rect {
+        r(492.0, 200.0, 160.0, 18.0)
+    }
+
+    pub fn focus_toggle() -> Rect {
+        r(1048.0, 176.0, 80.0, 34.0)
+    }
+    pub fn focus_reset() -> Rect {
+        r(1136.0, 176.0, 76.0, 34.0)
     }
 }

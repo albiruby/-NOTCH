@@ -28,6 +28,7 @@ pub const CMD_FULLSCREEN: usize = 10;
 pub const CMD_LAYOUT_PANEL: usize = 11;
 pub const CMD_LAYOUT_WIDE: usize = 12;
 pub const CMD_LAYOUT_CARDS: usize = 13;
+pub const CMD_LAYOUT_HUB: usize = 14;
 
 pub struct MenuState {
     pub notch: bool,
@@ -116,6 +117,12 @@ pub fn show_menu(owner: HWND, state: &MenuState) -> Result<()> {
         } else {
             MF_STRING
         };
+        let hub_flags = if state.layout == crate::state::Layout::Hub {
+            MF_STRING | MF_CHECKED
+        } else {
+            MF_STRING
+        };
+        AppendMenuW(layout_menu, hub_flags, CMD_LAYOUT_HUB, w!("Hub (click to open all)"))?;
         AppendMenuW(layout_menu, panel_flags, CMD_LAYOUT_PANEL, w!("Panel"))?;
         AppendMenuW(layout_menu, wide_flags, CMD_LAYOUT_WIDE, w!("Wide bar"))?;
         AppendMenuW(layout_menu, cards_flags, CMD_LAYOUT_CARDS, w!("Cards"))?;

@@ -8,10 +8,11 @@ kompositor Windows, jadi aplikasi hanya menggambar ketika ada yang berubah.
 
 ## Status
 
-v1.5 — glassmorphism penuh: permukaan tembus pandang, kilau diagonal, tepi bercahaya, bayangan lembut. Visual mengikuti referensi brand. Yang sudah ada:
+v1.6 — layout Hub jadi default (klik pill, semua widget muncul). Glassmorphism penuh: permukaan tembus pandang, kilau diagonal, tepi bercahaya, bayangan lembut. Visual mengikuti referensi brand. Yang sudah ada:
 
-**Tiga layout**
-- `Panel` (default): panel vertikal dengan 7 halaman.
+**Empat layout**
+- `Hub` (default): klik pill, semua widget muncul sekaligus: Apps launcher, Clipboard, Media + CPU/RAM/baterai, Focus timer, Quick Controls, dan File Shelf. Pill berubah jadi top bar. Klik area kosong atau top bar untuk menutup.
+- `Panel`: panel vertikal dengan 7 halaman.
 - `Wide bar`: satu bar panjang berisi artwork, judul/artis, transport, progress, CPU/RAM/baterai, dan jam. Klik bar untuk membuka panel halaman penuh; setelah panel ditutup, bar lebar kembali otomatis.
 - `Cards`: dua kartu mengambang di kanan bawah. Quick Controls berisi volume, brightness, Wi-Fi/BT, Focus, Battery, Record, dan Theme. File Shelf berisi path file yang di-drag, klik untuk membuka, Clear untuk mengosongkan.
 - Pilih lewat tray → **Layout**.
@@ -126,7 +127,9 @@ Untuk pengujian, `notch.exe --expanded` langsung membuka panel tanpa hover.
 
 | Aksi | Hasil |
 | --- | --- |
-| Hover pill | Buka panel atau wide bar sesuai layout |
+| Klik pill (Hub) | Buka semua widget sekaligus |
+| Klik area kosong / top bar (Hub) | Tutup Hub |
+| Hover pill (Panel/Wide) | Buka panel atau wide bar sesuai layout |
 | Klik wide bar | Buka panel halaman penuh |
 | Drag slider di kartu | Ubah volume/brightness |
 | Klik chip Focus | Start/pause timer fokus |
@@ -157,7 +160,7 @@ Dibuat otomatis di `%APPDATA%\Notch\`.
 
 | Field | Arti |
 | --- | --- |
-| `layout` | `panel` (default), `wide`, atau `cards` |
+| `layout` | `hub` (default), `panel`, `wide`, atau `cards` |
 | `opacity` | Opasitas background (0.2–1.0) |
 | `compact_width` / `compact_height` | Ukuran pill |
 | `expanded_width` / `expanded_height` | Ukuran panel |

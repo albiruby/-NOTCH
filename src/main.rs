@@ -173,7 +173,7 @@ impl App {
             charging: self.charging,
             tasks: self.tasks.tasks.clone(),
             shelf_paths: self.shelf.paths.clone(),
-            apps: self.apps.iter().take(5).map(|app| app.name.clone()).collect(),
+            apps: self.apps.iter().take(6).map(|app| app.name.clone()).collect(),
             water: self.tasks.water,
             water_goal: self.tasks.water_goal,
             clip_items: self.clip_items.clone(),
@@ -244,7 +244,161 @@ impl App {
         }
     }
 
+    /// Click handling for the Hub layout. Compact: the pill opens the hub.
+    /// Open: widgets act, empty space or the top bar closes it.
+    fn hub_click(&mut self, hwnd: HWND, x: f32, y: f32) {
+        use state::hub;
+        if self.dragging_volume || self.dragging_brightness {
+            let hits = state::card_hits();
+            let qx = x - hub::QUICK_OFFSET.0;
+            if self.dragging_volume {
+                self.apply_volume(qx, &hits.volume);
+            } else {
+                self.apply_brightness(qx, &hits.brightness);
+            }
+            self.dragging_volume = false;
+            self.dragging_brightness = false;
+            unsafe {
+                let _ = ReleaseCapture();
+            }
+            return;
+        }
+        if self.state.phase == Phase::Compact {
+            if self.state.hit_shape(&self.metrics).contains(x, y) {
+                self.set_phase(Phase::Expanded);
+            }
+            return;
+        }
+        if self.state.t < 0.5 {
+            return;
+        }
+
+        // Media card.
+        let cmd = if hub::prev().contains(x, y) {
+            Some(media::Command::Previous)
+        } else if hub::play().contains(x, y) {
+            Some(media::Command::Toggle)
+        } else if hub::next().contains(x, y) {
+            Some(media::Command::Next)
+        } else {
+            None
+        };
+        if let Some(cmd) = cmd {
+            media::send(cmd);
+            return;
+        }
+        let progress = hub::progress();
+        if progress.contains(x, y) {
+            let ratio = ((x - progress.x) / progress.w).clamp(0.0, 1.0);
+            let duration = media::snapshot().duration;
+            if duration > 0.0 {
+                media::send(media::Command::Seek(duration * ratio));
+            }
+            return;
+        }
+
+        // Launcher.
+        for index in 0..hub::APP_ROWS {
+            if hub::app_row(index).contains(x, y) {
+                if let Some(entry) = self.apps.get(index) {
+                    open_path(&entry.path);
+                    self.set_phase(Phase::Compact);
+                }
+                return;
+            }
+        }
+
+        // Clipboard.
+        if hub::clip_clear().contains(x, y) {
+            clipboard::clear();
+            self.clip_items.clear();
+            self.draw();
+            return;
+        }
+        for index in 0..hub::CLIP_ROWS {
+            if hub::clip_row(index).contains(x, y) {
+                if let Some(text) = self.clip_items.get(index).cloned() {
+                    clipboard::copy(hwnd, &text);
+                    self.show_overlay(Overlay {
+                        kind: OverlayKind::Copied,
+                        value: 0.0,
+                        muted: false,
+                        on: false,
+                        goal: 0,
+                    });
+                }
+                return;
+            }
+        }
+
+        // Focus.
+        if hub::focus_toggle().contains(x, y) {
+            self.focus_running = !self.focus_running;
+            if self.focus_running {
+                self.focus_remaining = self.focus_remaining.max(1.0);
+            }
+            self.draw();
+            return;
+        }
+        if hub::focus_reset().contains(x, y) {
+            self.focus_remaining = 1500.0;
+            self.focus_running = false;
+            self.draw();
+            return;
+        }
+
+        // Quick controls (Cards geometry, shifted into the hub).
+        let hits = state::card_hits();
+        let (qx, qy) = (x - hub::QUICK_OFFSET.0, y - hub::QUICK_OFFSET.1);
+        if hub::quick().contains(x, y) {
+            if hits.focus.contains(qx, qy) {
+                self.focus_running = !self.focus_running;
+                if self.focus_running {
+                    self.focus_remaining = self.focus_remaining.max(1.0);
+                }
+                self.draw();
+            } else if hits.battery.contains(qx, qy) {
+                open_uri(w!("ms-settings:batterysaver"));
+            } else if hits.record.contains(qx, qy) {
+                open_uri(w!("ms-gamebar"));
+            } else if hits.theme.contains(qx, qy) {
+                open_uri(w!("ms-settings:colors"));
+            }
+            return;
+        }
+
+        // File shelf.
+        let (sx, sy) = (x - hub::SHELF_OFFSET.0, y - hub::SHELF_OFFSET.1);
+        if hub::shelf().contains(x, y) {
+            if hits.clear.contains(sx, sy) {
+                self.shelf.clear();
+                self.draw();
+                return;
+            }
+            for (index, row) in hits.rows.iter().enumerate() {
+                if row.contains(sx, sy) {
+                    if let Some(path) = self.shelf.paths.get(index) {
+                        open_path(path);
+                    }
+                    return;
+                }
+            }
+            return;
+        }
+
+        if hub::cards().iter().any(|card| card.contains(x, y)) {
+            return;
+        }
+        // Top bar or empty space closes the hub.
+        self.set_phase(Phase::Compact);
+    }
+
     fn hit(&self, x: f32, y: f32) -> bool {
+        if self.layout == Layout::Hub && self.state.phase == Phase::Expanded {
+            // While open, the whole canvas takes clicks so a click on empty
+            // space can close the hub.
+            return x >= 0.0 && y >= 0.0 && x <= state::hub::W && y <= state::hub::H;
+        }
         if self.layout == Layout::Cards {
             return state::quick_card().contains(x, y) || state::shelf_card().contains(x, y);
         }
@@ -703,7 +857,8 @@ unsafe extern "system" fn notch_wndproc(
                 let x = x_lparam(lparam) / app.scale;
                 let y = y_lparam(lparam) / app.scale;
 
-                if app.layout == Layout::Cards {
+                if app.layout == Layout::Cards || (app.layout == Layout::Hub && (app.dragging_volume || app.dragging_brightness)) {
+                    let x = if app.layout == Layout::Hub { x - state::hub::QUICK_OFFSET.0 } else { x };
                     let hits = state::card_hits();
                     if app.dragging_volume {
                         app.apply_volume(x, &hits.volume);
@@ -733,6 +888,9 @@ unsafe extern "system" fn notch_wndproc(
                         app.tracking_leave = true;
                     }
 
+                    if app.layout == Layout::Hub {
+                        return LRESULT(0);
+                    }
                     match app.state.phase {
                         Phase::Compact if app.hit(x, y) => app.set_phase(Phase::Expanded),
                         Phase::Expanded
@@ -837,6 +995,21 @@ unsafe extern "system" fn notch_wndproc(
         WM_LBUTTONDOWN => {            if let Some(app) = app(hwnd) {
                 let x = x_lparam(lparam) / app.scale;
                 let y = y_lparam(lparam) / app.scale;
+                if app.layout == Layout::Hub && app.state.phase == Phase::Expanded {
+                    let (dx, dy) = state::hub::QUICK_OFFSET;
+                    let (qx, qy) = (x - dx, y - dy);
+                    let hits = state::card_hits();
+                    if hits.volume.contains(qx, qy) {
+                        app.dragging_volume = true;
+                        let _ = SetCapture(hwnd);
+                        app.apply_volume(qx, &hits.volume);
+                    } else if hits.brightness.contains(qx, qy) {
+                        app.dragging_brightness = true;
+                        let _ = SetCapture(hwnd);
+                        app.apply_brightness(qx, &hits.brightness);
+                    }
+                    return LRESULT(0);
+                }
                 if app.layout == Layout::Cards {
                     let hits = state::card_hits();
                     if hits.volume.contains(x, y) {
@@ -869,7 +1042,7 @@ unsafe extern "system" fn notch_wndproc(
         WM_MOUSELEAVE => {
             if let Some(app) = app(hwnd) {
                 app.tracking_leave = false;
-                if !app.editing {
+                if !app.editing && app.layout != Layout::Hub {
                     app.set_phase(Phase::Compact);
                 }
             }
@@ -879,6 +1052,10 @@ unsafe extern "system" fn notch_wndproc(
             if let Some(app) = app(hwnd) {
                 let x = x_lparam(lparam) / app.scale;
                 let y = y_lparam(lparam) / app.scale;
+                if app.layout == Layout::Hub {
+                    app.hub_click(hwnd, x, y);
+                    return LRESULT(0);
+                }
                 if app.layout == Layout::Cards {
                     let hits = state::card_hits();
                     if app.dragging_volume {
@@ -1235,7 +1412,7 @@ unsafe extern "system" fn notch_wndproc(
         audio::WM_APP_VOLUME => {
             if let Some(app) = app(hwnd) {
                 app.update_volume_overlay();
-                if app.layout == Layout::Cards {
+                if app.layout == Layout::Cards || app.layout == Layout::Hub {
                     app.draw();
                 }
             }
@@ -1382,6 +1559,11 @@ unsafe extern "system" fn menu_wndproc(
                 tray::CMD_LAYOUT_WIDE => {
                     if let Some(app) = app(HWND(NOTCH_HWND.load(Ordering::Relaxed) as *mut core::ffi::c_void)) {
                         app.apply_layout(Layout::Wide, true);
+                    }
+                }
+                tray::CMD_LAYOUT_HUB => {
+                    if let Some(app) = app(HWND(NOTCH_HWND.load(Ordering::Relaxed) as *mut core::ffi::c_void)) {
+                        app.apply_layout(Layout::Hub, true);
                     }
                 }
                 tray::CMD_LAYOUT_CARDS => {

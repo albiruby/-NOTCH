@@ -23,7 +23,7 @@ impl Default for Settings {
     fn default() -> Self {
         Self {
             mode: SurfaceMode::Island,
-            layout: Layout::Panel,
+            layout: Layout::Hub,
             opacity: 1.0,
             compact_width: 200.0,
             compact_height: 34.0,

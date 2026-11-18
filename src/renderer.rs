@@ -5,7 +5,7 @@ use windows::Win32::Foundation::HWND;
 use windows::Win32::Graphics::Direct2D::Common::{D2D1_COLOR_F, D2D1_GRADIENT_STOP, D2D_RECT_F};
 use windows::Win32::Graphics::Direct2D::{
     ID2D1Bitmap1, ID2D1Brush, ID2D1Device, ID2D1DeviceContext, ID2D1LinearGradientBrush,
-    ID2D1SolidColorBrush, ID2D1Bitmap, D2D1_ELLIPSE, D2D1_ANTIALIAS_MODE_PER_PRIMITIVE, D2D1_INTERPOLATION_MODE_LINEAR,
+    ID2D1SolidColorBrush, ID2D1Bitmap, D2D1_LAYER_PARAMETERS1, D2D1_LAYER_OPTIONS1_NONE, D2D1_ELLIPSE, D2D1_ANTIALIAS_MODE_PER_PRIMITIVE, D2D1_INTERPOLATION_MODE_LINEAR,
     D2D1_BUFFER_PRECISION_8BPC_UNORM,
     D2D1_COLOR_INTERPOLATION_MODE_STRAIGHT, D2D1_COLOR_SPACE_SRGB,
     D2D1_DEVICE_CONTEXT_OPTIONS_NONE, D2D1_DRAW_TEXT_OPTIONS_CLIP, D2D1_EXTEND_MODE_CLAMP,
@@ -111,6 +111,7 @@ pub struct Renderer {
     fmt_pill_time: IDWriteTextFormat,
     fmt_pill_title: IDWriteTextFormat,
     fmt_card_title: IDWriteTextFormat,
+    fmt_card_title_center: IDWriteTextFormat,
     art_id: u64,
     art_bitmap: Option<ID2D1Bitmap1>,
 }
@@ -348,6 +349,14 @@ impl Renderer {
                     DWRITE_TEXT_ALIGNMENT_LEADING,
                     DWRITE_PARAGRAPH_ALIGNMENT_CENTER,
                 )?,
+                fmt_card_title_center: format(
+                    &dwrite,
+                    theme::typography::FONT_UI,
+                    16.0,
+                    DWRITE_FONT_WEIGHT_BOLD,
+                    DWRITE_TEXT_ALIGNMENT_CENTER,
+                    DWRITE_PARAGRAPH_ALIGNMENT_CENTER,
+                )?,
                 art_id: 0,
                 art_bitmap: None,
             })
@@ -374,11 +383,15 @@ impl Renderer {
             ctx.Clear(None);
 
             if p.layout == crate::state::Layout::Cards {
-                self.draw_cards(p)?;
+                self.draw_cards(p, None)?;
                 ctx.EndDraw(None, None)?;
                 let hr = self.swapchain.Present(0, DXGI_PRESENT(0));
                 hr.ok()?;
                 return Ok(());
+            }
+
+            if p.layout == crate::state::Layout::Hub && p.t > 0.01 {
+                self.draw_hub(p)?;
             }
 
             let border = theme::rgb(theme::color::VIOLET_800, 0.30 * p.opacity);
@@ -1728,6 +1741,54 @@ impl Renderer {
                 );
             }
 
+            if panel_alpha > 0.01 && p.layout == crate::state::Layout::Hub {
+                let top = visible_top;
+                let cy = (top + shape.bottom()) * 0.5;
+                let x = shape.x;
+                let w = shape.w;
+                draw_logo(ctx, &self.fmt_logo, x + 30.0, cy, 13.0, s, panel_alpha)?;
+                let mut left = x + 54.0;
+                if let Some(art) = &self.art_bitmap {
+                    draw_rounded_art(ctx, art, scaled_rect(left, cy - 14.0, 28.0, 28.0, s), 7.0 * s, panel_alpha)?;
+                    left += 36.0;
+                }
+                let title = solid(ctx, &primary)?;
+                title.SetOpacity(panel_alpha);
+                let sub = solid(ctx, &secondary)?;
+                sub.SetOpacity(0.8 * panel_alpha);
+                if p.media.available {
+                    draw_text(ctx, &p.media.title, &self.fmt_pill_title, scaled_rect(left, cy - 15.0, 170.0, 16.0, s), &title);
+                    draw_text(ctx, &p.media.artist, &self.fmt_small, scaled_rect(left, cy + 1.0, 170.0, 14.0, s), &sub);
+                } else {
+                    draw_text(ctx, "NOTCH", &self.fmt_pill_title, scaled_rect(left, cy - 8.0, 170.0, 16.0, s), &title);
+                }
+
+                let line = solid(ctx, &theme::rgb(0xFFFFFF, 0.10 * panel_alpha))?;
+                let sys_x = x + 262.0;
+                ctx.FillRectangle(&scaled_rect(sys_x - 12.0, cy - 13.0, 1.0, 26.0, s), &line);
+                for (index, (label, value)) in [("CPU", p.cpu), ("RAM", p.ram)].iter().enumerate() {
+                    let col = sys_x + index as f32 * 48.0;
+                    draw_text(ctx, label, &self.fmt_status, scaled_rect(col, cy - 14.0, 44.0, 12.0, s), &sub);
+                    draw_text(ctx, &format!("{value:.0}%"), &self.fmt_pill_title, scaled_rect(col, cy - 2.0, 44.0, 16.0, s), &title);
+                }
+                ctx.FillRectangle(&scaled_rect(sys_x + 98.0, cy - 13.0, 1.0, 26.0, s), &line);
+                let on = |state: Option<bool>| -> Result<ID2D1SolidColorBrush> {
+                    let color = if state == Some(true) {
+                        theme::rgb(theme::color::TEXT_PRIMARY, panel_alpha)
+                    } else {
+                        theme::rgb(theme::color::TEXT_DISABLED, panel_alpha)
+                    };
+                    solid(ctx, &color)
+                };
+                draw_text(ctx, "\u{E701}", &self.fmt_icon, scaled_rect(sys_x + 108.0, cy - 12.0, 24.0, 24.0, s), &on(p.net.wifi)?);
+                draw_text(ctx, "\u{E702}", &self.fmt_icon, scaled_rect(sys_x + 136.0, cy - 12.0, 24.0, 24.0, s), &on(p.net.bluetooth)?);
+
+                let right = x + w - 44.0;
+                draw_text(ctx, &p.date, &self.fmt_time_right, scaled_rect(right - 120.0, cy - 15.0, 120.0, 14.0, s), &sub);
+                draw_text(ctx, &p.time, &self.fmt_pill_time, scaled_rect(right - 120.0, cy - 1.0, 120.0, 16.0, s), &title);
+                draw_text(ctx, "\u{E70E}", &self.fmt_icon_sm, scaled_rect(x + w - 38.0, cy - 10.0, 20.0, 20.0, s), &sub);
+            }
+
             let ctx = &self.ctx;
             ctx.EndDraw(None, None)?;
             let hr = self.swapchain.Present(0, DXGI_PRESENT(0));
@@ -1736,7 +1797,9 @@ impl Renderer {
         Ok(())
     }
 
-    fn draw_cards(&self, p: &DrawParams) -> Result<()> {
+    /// `hub`: Some(slide) when drawn inside the Hub overlay. The caller owns
+    /// the card backgrounds and the fade layer; this shifts content into place.
+    fn draw_cards(&self, p: &DrawParams, hub: Option<f32>) -> Result<()> {
         let s = p.scale;
         let hits = crate::state::card_hits();
         unsafe {
@@ -1746,7 +1809,21 @@ impl Renderer {
             let accent = solid(ctx, &theme::rgb(theme::color::ACCENT_PRIMARY, 1.0))?;
             let border_color = theme::rgb(theme::color::VIOLET_800, 0.32 * p.opacity);
 
+            let shift = |offset: (f32, f32), slide: f32| windows_numerics::Matrix3x2 {
+                M11: 1.0,
+                M12: 0.0,
+                M21: 0.0,
+                M22: 1.0,
+                M31: offset.0 * s,
+                M32: (offset.1 + slide) * s,
+            };
+            if let Some(slide) = hub {
+                ctx.SetTransform(&shift(crate::state::hub::QUICK_OFFSET, slide));
+            }
             for card in [crate::state::quick_card(), crate::state::shelf_card()] {
+                if hub.is_some() {
+                    break;
+                }
                 let rect = scaled_rect(card.x, card.y, card.w, card.h, s);
                 let rr = D2D1_ROUNDED_RECT {
                     rect,
@@ -1871,6 +1948,15 @@ impl Renderer {
                 );
             }
 
+            if let Some(slide) = hub {
+                ctx.SetTransform(&shift(crate::state::hub::SHELF_OFFSET, slide));
+                let shelf = crate::state::shelf_card();
+                let visible = crate::state::hub::shelf().h;
+                ctx.PushAxisAlignedClip(
+                    &scaled_rect(shelf.x, shelf.y, shelf.w, visible, s),
+                    D2D1_ANTIALIAS_MODE_PER_PRIMITIVE,
+                );
+            }
             let folder = solid(ctx, &theme::rgb(theme::color::WARNING, 1.0))?;
             draw_text(ctx, "\u{E8B7}", &self.fmt_icon_sm, scaled_rect(pad, 366.0, 16.0, 20.0, s), &folder);
             draw_text(ctx, "File Shelf", &self.fmt_card_title, scaled_rect(pad + 22.0, 366.0, 220.0, 20.0, s), &primary);
@@ -1932,6 +2018,200 @@ impl Renderer {
                     );
                 }
             }
+        }
+        if hub.is_some() {
+            unsafe {
+                self.ctx.PopAxisAlignedClip();
+                self.ctx.SetTransform(&windows_numerics::Matrix3x2::identity());
+            }
+        }
+        Ok(())
+    }
+
+    /// Hub overlay: every widget at once, fading and sliding in with `p.t`.
+    fn draw_hub(&self, p: &DrawParams) -> Result<()> {
+        use crate::state::hub;
+        let s = p.scale;
+        let t = p.t.clamp(0.0, 1.0);
+        let slide = (1.0 - t) * 16.0;
+        unsafe {
+            let ctx = &self.ctx;
+            let params = D2D1_LAYER_PARAMETERS1 {
+                contentBounds: D2D_RECT_F {
+                    left: -1.0e6,
+                    top: -1.0e6,
+                    right: 1.0e6,
+                    bottom: 1.0e6,
+                },
+                geometricMask: std::mem::ManuallyDrop::new(None),
+                maskAntialiasMode: D2D1_ANTIALIAS_MODE_PER_PRIMITIVE,
+                maskTransform: windows_numerics::Matrix3x2::identity(),
+                opacity: t,
+                opacityBrush: std::mem::ManuallyDrop::new(None),
+                layerOptions: D2D1_LAYER_OPTIONS1_NONE,
+            };
+            ctx.PushLayer(&params, None);
+            ctx.SetTransform(&windows_numerics::Matrix3x2::translation(0.0, slide * s));
+
+            for card in hub::cards() {
+                draw_glass(
+                    ctx,
+                    scaled_rect(card.x, card.y, card.w, card.h, s),
+                    20.0 * s,
+                    p.opacity,
+                    Glass::Card,
+                    s,
+                )?;
+            }
+
+            let primary = solid(ctx, &theme::rgb(theme::color::TEXT_PRIMARY, 1.0))?;
+            let secondary = solid(ctx, &theme::rgb(theme::color::TEXT_SECONDARY, 1.0))?;
+            let muted = solid(ctx, &theme::rgb(theme::color::TEXT_MUTED, 1.0))?;
+            let accent = solid(ctx, &theme::rgb(theme::color::VIOLET_500, 1.0))?;
+
+            // Launcher.
+            let l = hub::launcher();
+            draw_glass(ctx, scaled_rect(l.x + 12.0, l.y + 14.0, l.w - 24.0, 40.0, s), 12.0 * s, 1.0, Glass::Tile, s)?;
+            draw_text(ctx, "\u{E721}", &self.fmt_icon_sm, scaled_rect(l.x + 24.0, l.y + 14.0, 20.0, 40.0, s), &secondary);
+            draw_text(ctx, "Apps", &self.fmt_card_title, scaled_rect(l.x + 52.0, l.y + 14.0, 160.0, 40.0, s), &primary);
+            draw_text(ctx, "pinned", &self.fmt_small, scaled_rect(l.x + 100.0, l.y + 14.0, 120.0, 40.0, s), &muted);
+            if p.apps.is_empty() {
+                draw_text(ctx, "No pinned apps found.", &self.fmt_body, scaled_rect(l.x + 24.0, l.y + 80.0, 280.0, 20.0, s), &muted);
+            }
+            for (index, name) in p.apps.iter().take(hub::APP_ROWS).enumerate() {
+                let row = hub::app_row(index);
+                let cy = row.y + row.h * 0.5;
+                let initial: String = name.chars().next().map(|c| c.to_uppercase().collect()).unwrap_or_default();
+                draw_glass(ctx, scaled_rect(row.x, row.y + 6.0, 40.0, 40.0, s), 10.0 * s, 1.0, Glass::Tile, s)?;
+                draw_text(ctx, &initial, &self.fmt_card_title_center, scaled_rect(row.x, row.y + 6.0, 40.0, 40.0, s), &accent);
+                draw_text(ctx, name, &self.fmt_wide_title, scaled_rect(row.x + 54.0, cy - 17.0, row.w - 60.0, 18.0, s), &primary);
+                draw_text(ctx, "App", &self.fmt_wide_sub, scaled_rect(row.x + 54.0, cy + 2.0, 120.0, 16.0, s), &muted);
+            }
+
+            // Clipboard.
+            let c = hub::clip();
+            draw_text(ctx, "Clipboard", &self.fmt_card_title, scaled_rect(c.x + 20.0, c.y + 12.0, 200.0, 22.0, s), &primary);
+            let clear = hub::clip_clear();
+            draw_glass(ctx, scaled_rect(clear.x, clear.y, clear.w, clear.h, s), 8.0 * s, 1.0, Glass::Tile, s)?;
+            draw_text(ctx, "Clear all", &self.fmt_tab, scaled_rect(clear.x, clear.y, clear.w, clear.h, s), &secondary);
+            if p.clip_items.is_empty() {
+                draw_text(ctx, "Copy something to see it here.", &self.fmt_body, scaled_rect(c.x + 20.0, c.y + 52.0, 300.0, 20.0, s), &muted);
+            }
+            for (index, text) in p.clip_items.iter().take(hub::CLIP_ROWS).enumerate() {
+                let row = hub::clip_row(index);
+                let line: String = text.split_whitespace().collect::<Vec<_>>().join(" ");
+                draw_text(ctx, "\u{E77F}", &self.fmt_icon_sm, scaled_rect(row.x, row.y, 20.0, row.h, s), &accent);
+                draw_text(ctx, &line, &self.fmt_body, scaled_rect(row.x + 28.0, row.y, row.w - 28.0, row.h, s), &primary);
+            }
+
+            // Media + system.
+            let m = hub::media();
+            let art_rect = scaled_rect(m.x + 20.0, m.y + 20.0, 88.0, 88.0, s);
+            if let Some(art) = &self.art_bitmap {
+                draw_rounded_art(ctx, art, art_rect, 14.0 * s, 1.0)?;
+            } else {
+                draw_glass(ctx, art_rect, 14.0 * s, 1.0, Glass::Tile, s)?;
+                draw_logo(ctx, &self.fmt_logo, m.x + 64.0, m.y + 64.0, 16.0, s, 1.0)?;
+            }
+            let (title, artist) = if p.media.available {
+                (p.media.title.as_str(), p.media.artist.as_str())
+            } else {
+                ("Nothing playing", "Play something to control it here")
+            };
+            draw_text(ctx, title, &self.fmt_wide_title, scaled_rect(m.x + 120.0, m.y + 20.0, 168.0, 20.0, s), &primary);
+            draw_text(ctx, artist, &self.fmt_wide_sub, scaled_rect(m.x + 120.0, m.y + 42.0, 168.0, 16.0, s), &secondary);
+            let (prev, play, next) = (hub::prev(), hub::play(), hub::next());
+            draw_text(ctx, "\u{E892}", &self.fmt_icon, scaled_rect(prev.x, prev.y, prev.w, prev.h, s), &secondary);
+            let disc = violet_gradient(ctx, &scaled_rect(play.x, play.y, play.w, play.h, s), 1.0)?;
+            ctx.FillEllipse(&circle((play.x + play.w * 0.5) * s, (play.y + play.h * 0.5) * s, play.w * 0.5 * s), &disc);
+            let white = solid(ctx, &theme::rgb(0xFFFFFF, 1.0))?;
+            draw_text(
+                ctx,
+                if p.media.playing { "\u{E769}" } else { "\u{E768}" },
+                &self.fmt_icon,
+                scaled_rect(play.x, play.y, play.w, play.h, s),
+                &white,
+            );
+            draw_text(ctx, "\u{E893}", &self.fmt_icon, scaled_rect(next.x, next.y, next.w, next.h, s), &secondary);
+            let bar = hub::progress();
+            let ratio = if p.media.duration > 0.0 {
+                (p.media.position / p.media.duration).clamp(0.0, 1.0)
+            } else {
+                0.0
+            };
+            draw_slider(ctx, bar.x, bar.y + 7.0, bar.w, ratio, p.media.available, s, 1.0)?;
+            draw_text(
+                ctx,
+                &format!("{} / {}", format_time(p.media.position), format_time(p.media.duration)),
+                &self.fmt_small,
+                scaled_rect(bar.x, bar.y + 20.0, bar.w, 16.0, s),
+                &muted,
+            );
+            let divider = solid(ctx, &theme::rgb(0xFFFFFF, 0.08))?;
+            ctx.FillRectangle(&scaled_rect(m.x + 292.0, m.y + 20.0, 1.0, m.h - 40.0, s), &divider);
+            let battery = p.battery.map(|b| b as f32).unwrap_or(0.0);
+            let rings = [
+                ("CPU", p.cpu.clamp(0.0, 100.0), format!("{:.0}%", p.cpu)),
+                ("RAM", p.ram.clamp(0.0, 100.0), format!("{:.0}%", p.ram)),
+                (
+                    if p.charging { "POWER" } else { "BATT" },
+                    battery,
+                    p.battery.map(|b| format!("{b}%")).unwrap_or_else(|| "N/A".into()),
+                ),
+            ];
+            for (index, (label, value, text)) in rings.iter().enumerate() {
+                let cx = m.x + 320.0 + index as f32 * 44.0;
+                let cy = m.y + 66.0;
+                let color = if index == 2 {
+                    if *value <= 15.0 { theme::color::DANGER } else { theme::color::SUCCESS }
+                } else if *value >= theme::metric::DANGER_THRESHOLD {
+                    theme::color::DANGER
+                } else if *value >= theme::metric::WARNING_THRESHOLD {
+                    theme::color::WARNING
+                } else {
+                    theme::color::VIOLET_600
+                };
+                draw_ring(ctx, cx, cy, 17.0, 3.5, value / 100.0, &theme::rgb(color, 1.0), s, 1.0)?;
+                draw_text(ctx, text, &self.fmt_tab, scaled_rect(cx - 17.0, cy - 8.0, 34.0, 16.0, s), &primary);
+                draw_text(ctx, label, &self.fmt_tab, scaled_rect(cx - 22.0, cy + 22.0, 44.0, 14.0, s), &muted);
+            }
+            draw_text(ctx, &p.date, &self.fmt_small, scaled_rect(m.x + 304.0, m.y + 120.0, 124.0, 16.0, s), &secondary);
+            draw_text(ctx, &p.time, &self.fmt_card_title, scaled_rect(m.x + 304.0, m.y + 138.0, 124.0, 24.0, s), &primary);
+
+            // Focus.
+            let f = hub::focus();
+            draw_text(ctx, "Focus", &self.fmt_card_title, scaled_rect(f.x + 20.0, f.y + 12.0, 120.0, 22.0, s), &primary);
+            draw_text(
+                ctx,
+                if p.focus_running { "Running" } else { "Paused" },
+                &self.fmt_small,
+                scaled_rect(f.x + 80.0, f.y + 12.0, 120.0, 22.0, s),
+                if p.focus_running { &accent } else { &muted },
+            );
+            let remaining = p.focus_remaining.max(0.0) as u32;
+            draw_text(
+                ctx,
+                &format!("{:02}:{:02}", remaining / 60, remaining % 60),
+                &self.fmt_focus,
+                scaled_rect(f.x + 12.0, f.y + 40.0, 196.0, 64.0, s),
+                &primary,
+            );
+            for (rect, label) in [
+                (hub::focus_toggle(), if p.focus_running { "Pause" } else { "Start" }),
+                (hub::focus_reset(), "Reset"),
+            ] {
+                draw_glass(ctx, scaled_rect(rect.x, rect.y, rect.w, rect.h, s), 10.0 * s, 1.0, Glass::Tile, s)?;
+                draw_text(ctx, label, &self.fmt_tab, scaled_rect(rect.x, rect.y, rect.w, rect.h, s), &primary);
+            }
+            draw_slider(ctx, f.x + 20.0, f.y + 124.0, f.w - 40.0, 1.0 - p.focus_remaining / 1500.0, false, s, 1.0)?;
+
+            ctx.SetTransform(&windows_numerics::Matrix3x2::identity());
+        }
+
+        // Quick controls + shelf reuse the Cards content, shifted into place.
+        self.draw_cards(p, Some(slide))?;
+        unsafe {
+            self.ctx.PopLayer();
         }
         Ok(())
     }
