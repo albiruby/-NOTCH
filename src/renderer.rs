@@ -394,71 +394,7 @@ impl Renderer {
                 bottom: shape.bottom() * s,
             };
             let radius = shape.r * s;
-            let rr = D2D1_ROUNDED_RECT {
-                rect,
-                radiusX: radius,
-                radiusY: radius,
-            };
-
-            let stops = [
-                D2D1_GRADIENT_STOP {
-                    position: 0.0,
-                    color: theme::rgb(
-                        theme::color::VIOLET_950,
-                        theme::glass::STRONG_TOP * p.opacity,
-                    ),
-                },
-                D2D1_GRADIENT_STOP {
-                    position: 0.62,
-                    color: theme::rgb(
-                        theme::color::GRAPHITE_900,
-                        theme::glass::STRONG_MID * p.opacity,
-                    ),
-                },
-                D2D1_GRADIENT_STOP {
-                    position: 1.0,
-                    color: theme::rgb(
-                        theme::color::GRAPHITE_950,
-                        theme::glass::STRONG_BOTTOM * p.opacity,
-                    ),
-                },
-            ];
-            let collection = ctx.CreateGradientStopCollection(
-                &stops,
-                D2D1_COLOR_SPACE_SRGB,
-                D2D1_COLOR_SPACE_SRGB,
-                D2D1_BUFFER_PRECISION_8BPC_UNORM,
-                D2D1_EXTEND_MODE_CLAMP,
-                D2D1_COLOR_INTERPOLATION_MODE_STRAIGHT,
-            )?;
-            let props = D2D1_LINEAR_GRADIENT_BRUSH_PROPERTIES {
-                startPoint: Vector2 {
-                    X: rect.left,
-                    Y: rect.top,
-                },
-                endPoint: Vector2 {
-                    X: rect.left,
-                    Y: rect.bottom,
-                },
-            };
-            let gradient: ID2D1LinearGradientBrush =
-                ctx.CreateLinearGradientBrush(&props, None, &collection)?;
-            ctx.FillRoundedRectangle(&rr, &gradient);
-            let border_brush = solid(ctx, &border)?;
-            ctx.DrawRoundedRectangle(&rr, &border_brush, 1.0, None);
-
-            // A single hairline on the top edge, so the panel reads as a surface
-            // catching light rather than a flat black box.
-            let highlight = solid(ctx, &theme::rgb(0xFFFFFF, theme::glass::HIGHLIGHT_OPACITY))?;
-            ctx.FillRectangle(
-                &D2D_RECT_F {
-                    left: (shape.x + shape.r) * s,
-                    top: (shape.y + 1.0) * s,
-                    right: (shape.right() - shape.r) * s,
-                    bottom: (shape.y + 1.8) * s,
-                },
-                &highlight,
-            );
+            draw_glass(ctx, rect, radius, p.opacity, Glass::Surface, s)?;
 
             // Shape coordinates can start above the surface in notch mode, so
             // content is laid out from the visible top edge.
@@ -1596,16 +1532,14 @@ impl Renderer {
                         panel_alpha,
                     )?;
                 } else {
-                    let tile = solid(ctx, &theme::rgb(theme::color::GRAPHITE_750, 0.9))?;
-                    tile.SetOpacity(panel_alpha);
-                    ctx.FillRoundedRectangle(
-                        &D2D1_ROUNDED_RECT {
-                            rect: scaled_rect(x + 22.0, y + 24.0, 48.0, 48.0, s),
-                            radiusX: 12.0 * s,
-                            radiusY: 12.0 * s,
-                        },
-                        &tile,
-                    );
+                    draw_glass(
+                        ctx,
+                        scaled_rect(x + 22.0, y + 24.0, 48.0, 48.0, s),
+                        12.0 * s,
+                        panel_alpha,
+                        Glass::Tile,
+                        s,
+                    )?;
                     draw_logo(ctx, &self.fmt_logo, x + 46.0, y + 48.0, 13.0, s, panel_alpha)?;
                 }
 
@@ -1819,63 +1753,7 @@ impl Renderer {
                     radiusX: 20.0 * s,
                     radiusY: 20.0 * s,
                 };
-                let stops = [
-                    D2D1_GRADIENT_STOP {
-                        position: 0.0,
-                        color: theme::rgb(
-                            theme::color::VIOLET_950,
-                            theme::glass::STRONG_TOP * p.opacity,
-                        ),
-                    },
-                    D2D1_GRADIENT_STOP {
-                        position: 0.62,
-                        color: theme::rgb(
-                            theme::color::GRAPHITE_900,
-                            theme::glass::STRONG_MID * p.opacity,
-                        ),
-                    },
-                    D2D1_GRADIENT_STOP {
-                        position: 1.0,
-                        color: theme::rgb(
-                            theme::color::GRAPHITE_950,
-                            theme::glass::STRONG_BOTTOM * p.opacity,
-                        ),
-                    },
-                ];
-                let collection = ctx.CreateGradientStopCollection(
-                    &stops,
-                    D2D1_COLOR_SPACE_SRGB,
-                    D2D1_COLOR_SPACE_SRGB,
-                    D2D1_BUFFER_PRECISION_8BPC_UNORM,
-                    D2D1_EXTEND_MODE_CLAMP,
-                    D2D1_COLOR_INTERPOLATION_MODE_STRAIGHT,
-                )?;
-                let props = D2D1_LINEAR_GRADIENT_BRUSH_PROPERTIES {
-                    startPoint: Vector2 {
-                        X: rect.left,
-                        Y: rect.top,
-                    },
-                    endPoint: Vector2 {
-                        X: rect.left,
-                        Y: rect.bottom,
-                    },
-                };
-                let gradient: ID2D1LinearGradientBrush =
-                    ctx.CreateLinearGradientBrush(&props, None, &collection)?;
-                ctx.FillRoundedRectangle(&rr, &gradient);
-                let border = solid(ctx, &border_color)?;
-                ctx.DrawRoundedRectangle(&rr, &border, 1.0, None);
-                let highlight =
-                    solid(ctx, &theme::rgb(0xFFFFFF, theme::glass::HIGHLIGHT_OPACITY))?;
-                ctx.FillRectangle(
-                    &D2D_RECT_F {
-                        left: (card.x + 20.0) * s,
-                        top: (card.y + 1.0) * s,
-                        right: (card.right() - 20.0) * s,
-                        bottom: (card.y + 1.8) * s,
-                    },
-                    &highlight,
-                );
+                draw_glass(ctx, rr.rect, 20.0 * s, p.opacity, Glass::Card, s)?;
             }
 
             let pad = 32.0;
@@ -1898,7 +1776,6 @@ impl Renderer {
                 Some(false) => ("Off", false),
                 None => ("N/A", false),
             };
-            let tile_bg = solid(ctx, &theme::rgb(theme::color::BG_INTERACTIVE, 0.75))?;
             for (index, (glyph, name, (state, on))) in [
                 ("\u{E701}", "Wi-Fi", wifi_state),
                 ("\u{E702}", "Bluetooth", bt_state),
@@ -1907,14 +1784,7 @@ impl Renderer {
             .enumerate()
             {
                 let tx = pad + index as f32 * 184.0;
-                ctx.FillRoundedRectangle(
-                    &D2D1_ROUNDED_RECT {
-                        rect: scaled_rect(tx, 46.0, 176.0, 30.0, s),
-                        radiusX: 10.0 * s,
-                        radiusY: 10.0 * s,
-                    },
-                    &tile_bg,
-                );
+                draw_glass(ctx, scaled_rect(tx, 46.0, 176.0, 30.0, s), 10.0 * s, 1.0, Glass::Tile, s)?;
                 draw_icon_badge(ctx, &self.fmt_icon_sm, glyph, tx + 16.0, 61.0, 11.0, on, s, 1.0)?;
                 draw_text(ctx, name, &self.fmt_pill_title, scaled_rect(tx + 34.0, 46.0, 80.0, 30.0, s), &primary);
                 let state_brush = solid(
@@ -1965,8 +1835,6 @@ impl Renderer {
                 &divider,
             );
 
-            let chip_bg = solid(ctx, &theme::rgb(theme::color::BG_INTERACTIVE, 0.75))?;
-            let chip_border = solid(ctx, &theme::rgb(theme::color::VIOLET_800, 0.45))?;
             for (rect, glyph, label, active, glyph_color) in [
                 (hits.focus, "\u{E7E8}", "Focus Mode", p.focus_running, theme::color::VIOLET_400),
                 (hits.battery, "\u{EBA6}", "Battery Saver", false, theme::color::SUCCESS),
@@ -1978,13 +1846,13 @@ impl Renderer {
                     radiusX: 10.0 * s,
                     radiusY: 10.0 * s,
                 };
+                draw_glass(ctx, rr.rect, 10.0 * s, 1.0, Glass::Tile, s)?;
                 if active {
                     let fill = solid(ctx, &theme::rgb(theme::color::ACCENT_PRIMARY, 0.22))?;
                     ctx.FillRoundedRectangle(&rr, &fill);
-                } else {
-                    ctx.FillRoundedRectangle(&rr, &chip_bg);
+                    let rim = solid(ctx, &theme::rgb(theme::color::VIOLET_500, 0.55))?;
+                    ctx.DrawRoundedRectangle(&rr, &rim, 1.0, None);
                 }
-                ctx.DrawRoundedRectangle(&rr, &chip_border, 1.0, None);
                 let icon = solid(ctx, &theme::rgb(glyph_color, 1.0))?;
                 draw_text(
                     ctx,
@@ -2490,4 +2358,143 @@ unsafe fn draw_icon_badge(
     let brush = solid(ctx, &color)?;
     draw_text(ctx, glyph, fmt, rect, &brush);
     Ok(())
+}
+
+#[derive(Clone, Copy, PartialEq)]
+enum Glass {
+    /// The notch / island itself. No outer shadow: the window hugs the shape.
+    Surface,
+    /// Floating desktop card with a soft drop shadow.
+    Card,
+    /// Inner tile or chip sitting on another glass layer.
+    Tile,
+}
+
+/// Glassmorphism surface: translucent tinted body, diagonal sheen, a light
+/// rim that is brighter on top, and (for cards) a soft drop shadow.
+/// `rect` and `radius` are already in pixels.
+unsafe fn draw_glass(
+    ctx: &ID2D1DeviceContext,
+    rect: D2D_RECT_F,
+    radius: f32,
+    opacity: f32,
+    kind: Glass,
+    s: f32,
+) -> Result<()> {
+    let g = &theme::glass::GLASS;
+    let rr = |r: D2D_RECT_F, rad: f32| D2D1_ROUNDED_RECT {
+        rect: r,
+        radiusX: rad,
+        radiusY: rad,
+    };
+
+    if kind == Glass::Card {
+        for i in 1..=4 {
+            let grow = i as f32 * 2.0 * s;
+            let shadow = solid(ctx, &theme::rgb(0x000000, g.shadow / i as f32 * opacity))?;
+            ctx.FillRoundedRectangle(
+                &rr(
+                    D2D_RECT_F {
+                        left: rect.left - grow * 0.5,
+                        top: rect.top + grow * 0.5,
+                        right: rect.right + grow * 0.5,
+                        bottom: rect.bottom + grow,
+                    },
+                    radius + grow,
+                ),
+                &shadow,
+            );
+        }
+    }
+
+    let (top, bottom) = if kind == Glass::Tile {
+        (
+            theme::rgb(0xFFFFFF, g.tile_fill * 1.4 * opacity),
+            theme::rgb(0xFFFFFF, g.tile_fill * 0.6 * opacity),
+        )
+    } else {
+        (
+            theme::rgb(theme::color::VIOLET_900, g.body_top * opacity),
+            theme::rgb(theme::color::GRAPHITE_950, g.body_bottom * opacity),
+        )
+    };
+    let body = linear(ctx, rect.left, rect.top, rect.left, rect.bottom, &[(0.0, top), (1.0, bottom)])?;
+    ctx.FillRoundedRectangle(&rr(rect, radius), &body);
+
+    // Diagonal sheen, strongest at the top-left corner.
+    let sheen_a = if kind == Glass::Tile { g.sheen * 0.5 } else { g.sheen };
+    let sheen = linear(
+        ctx,
+        rect.left,
+        rect.top,
+        rect.left + (rect.right - rect.left) * 0.55,
+        rect.bottom,
+        &[
+            (0.0, theme::rgb(0xFFFFFF, sheen_a * opacity)),
+            (0.45, theme::rgb(0xFFFFFF, sheen_a * 0.25 * opacity)),
+            (1.0, theme::rgb(0xFFFFFF, 0.0)),
+        ],
+    )?;
+    ctx.FillRoundedRectangle(&rr(rect, radius), &sheen);
+
+    // Rim: bright on top, violet through the middle, fading at the bottom.
+    let rim_a = if kind == Glass::Tile { g.rim * 0.6 } else { g.rim };
+    let rim = linear(
+        ctx,
+        rect.left,
+        rect.top,
+        rect.left,
+        rect.bottom,
+        &[
+            (0.0, theme::rgb(0xFFFFFF, rim_a * opacity)),
+            (0.5, theme::rgb(theme::color::VIOLET_500, rim_a * 0.55 * opacity)),
+            (1.0, theme::rgb(0xFFFFFF, rim_a * 0.2 * opacity)),
+        ],
+    )?;
+    let inset = 0.5 * s;
+    ctx.DrawRoundedRectangle(
+        &rr(
+            D2D_RECT_F {
+                left: rect.left + inset,
+                top: rect.top + inset,
+                right: rect.right - inset,
+                bottom: rect.bottom - inset,
+            },
+            (radius - inset).max(0.0),
+        ),
+        &rim,
+        1.0 * s,
+        None,
+    );
+    Ok(())
+}
+
+unsafe fn linear(
+    ctx: &ID2D1DeviceContext,
+    x0: f32,
+    y0: f32,
+    x1: f32,
+    y1: f32,
+    stops: &[(f32, D2D1_COLOR_F)],
+) -> Result<ID2D1LinearGradientBrush> {
+    let stops: Vec<D2D1_GRADIENT_STOP> = stops
+        .iter()
+        .map(|(position, color)| D2D1_GRADIENT_STOP {
+            position: *position,
+            color: *color,
+        })
+        .collect();
+    let collection = ctx.CreateGradientStopCollection(
+        &stops,
+        D2D1_COLOR_SPACE_SRGB,
+        D2D1_COLOR_SPACE_SRGB,
+        D2D1_BUFFER_PRECISION_8BPC_UNORM,
+        D2D1_EXTEND_MODE_CLAMP,
+        D2D1_COLOR_INTERPOLATION_MODE_STRAIGHT,
+    )?;
+    let props = D2D1_LINEAR_GRADIENT_BRUSH_PROPERTIES {
+        startPoint: Vector2 { X: x0, Y: y0 },
+        endPoint: Vector2 { X: x1, Y: y1 },
+    };
+    ctx.CreateLinearGradientBrush(&props, None, &collection)
 }

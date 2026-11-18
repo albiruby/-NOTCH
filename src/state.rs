@@ -304,6 +304,7 @@ pub struct Rect {
 }
 
 impl Rect {
+    #[allow(dead_code)]
     pub fn right(&self) -> f32 {
         self.x + self.w
     }

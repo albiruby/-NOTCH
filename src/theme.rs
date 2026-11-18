@@ -74,6 +74,25 @@ pub mod glass {
     pub const OPACITY_SOLID: f32 = 0.90;
     pub const BORDER_OPACITY: f32 = 0.30;
     pub const HIGHLIGHT_OPACITY: f32 = 0.10;
+
+    /// Glassmorphism recipe used by `renderer::draw_glass`.
+    pub struct Recipe {
+        pub body_top: f32,
+        pub body_bottom: f32,
+        pub tile_fill: f32,
+        pub sheen: f32,
+        pub rim: f32,
+        pub shadow: f32,
+    }
+
+    pub const GLASS: Recipe = Recipe {
+        body_top: 0.58,
+        body_bottom: 0.70,
+        tile_fill: 0.06,
+        sheen: 0.12,
+        rim: 0.30,
+        shadow: 0.22,
+    };
 }
 
 pub mod space {
