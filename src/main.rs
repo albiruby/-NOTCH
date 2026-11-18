@@ -780,6 +780,27 @@ impl App {
         self.draw();
     }
 
+    /// Scroll gesture over the island: nudge master volume and flash the
+    /// volume overlay. `steps` is wheel notches (positive = up).
+    fn nudge_volume(&mut self, steps: f32) {
+        let level = (self.volume + steps * 0.04).clamp(0.0, 1.0);
+        if let Some(audio) = &self.audio {
+            audio.set_level(level);
+            if self.muted {
+                audio.set_muted(false);
+            }
+        }
+        self.volume = level;
+        self.muted = false;
+        self.show_overlay(Overlay {
+            kind: OverlayKind::Volume,
+            value: level,
+            muted: false,
+            on: false,
+            goal: 0,
+        });
+    }
+
     fn update_volume_overlay(&mut self) {
         if self.dragging_volume {
             return;
@@ -1357,6 +1378,27 @@ unsafe extern "system" fn notch_wndproc(
                 if let Some(press) = app.press.take() {
                     if press.dragging {
                         app.finish_drag();
+                    }
+                }
+            }
+            LRESULT(0)
+        }
+        WM_MOUSEWHEEL => {
+            if let Some(app) = app(hwnd) {
+                // Only when the cursor is over the compact island, and only
+                // in island modes (notch is fixed to the edge).
+                if app.island_free() && app.state.phase == Phase::Compact {
+                    let mut pt = POINT {
+                        x: x_lparam(lparam) as i32,
+                        y: y_lparam(lparam) as i32,
+                    };
+                    let _ = ScreenToClient(hwnd, &mut pt);
+                    let x = pt.x as f32 / app.scale;
+                    let y = pt.y as f32 / app.scale;
+                    if app.state.hit_shape(&app.metrics).contains(x, y) {
+                        let delta = (wparam.0 >> 16) as i16 as f32 / WHEEL_DELTA as f32;
+                        app.nudge_volume(delta);
+                        return LRESULT(0);
                     }
                 }
             }
