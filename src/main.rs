@@ -187,6 +187,8 @@ impl App {
             date: self.date_text.clone(),
             cpu: self.sysmon.cpu,
             ram: self.sysmon.ram,
+            rx_bps: self.sysmon.rx_bps,
+            tx_bps: self.sysmon.tx_bps,
             media: media::snapshot(),
             volume: self.volume,
             muted: self.muted,

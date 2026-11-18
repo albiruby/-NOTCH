@@ -51,6 +51,8 @@ pub struct DrawParams {
     pub date: String,
     pub cpu: f32,
     pub ram: f32,
+    pub rx_bps: f64,
+    pub tx_bps: f64,
     pub media: crate::media::MediaInfo,
     pub volume: f32,
     pub muted: bool,
@@ -2937,6 +2939,19 @@ impl Renderer {
                 &self.fmt_card_title,
                 scaled_rect(m.x + 326.0, m.y + 138.0, 124.0, 24.0, s),
                 &primary,
+            );
+            // Network throughput, under the clock.
+            let net = format!(
+                "\u{2193} {}   \u{2191} {}",
+                crate::sysmon::format_rate(p.rx_bps),
+                crate::sysmon::format_rate(p.tx_bps)
+            );
+            draw_text(
+                ctx,
+                &net,
+                &self.fmt_small,
+                scaled_rect(m.x + 326.0, m.y + 164.0, 130.0, 14.0, s),
+                &muted,
             );
 
             // Focus.
