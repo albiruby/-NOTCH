@@ -8,7 +8,7 @@ kompositor Windows, jadi aplikasi hanya menggambar ketika ada yang berubah.
 
 ## Status
 
-v1.11 — kaca hampir bening; theme (Violet, Aurora Mint, Sunset Coral) mengubah seluruh tampilan: rona kaca, teks, track, tile, dan tepi. Mode iPhone X notch dan Dynamic Island (Pro). Hub memenuhi layar dengan tata letak lega ala referensi. Dynamic island bisa di-drag bebas dan menempel ke tepi/tengah layar. Layout Hub jadi default (klik pill, semua widget muncul). Glassmorphism penuh: permukaan tembus pandang, kilau diagonal, tepi bercahaya, bayangan lembut. Visual mengikuti referensi brand. Yang sudah ada:
+v1.12 — indikator privasi kamera/mikrofon dan Live Activities lewat CLI. Kaca hampir bening; theme (Violet, Aurora Mint, Sunset Coral) mengubah seluruh tampilan: rona kaca, teks, track, tile, dan tepi. Mode iPhone X notch dan Dynamic Island (Pro). Hub memenuhi layar dengan tata letak lega ala referensi. Dynamic island bisa di-drag bebas dan menempel ke tepi/tengah layar. Layout Hub jadi default (klik pill, semua widget muncul). Glassmorphism penuh: permukaan tembus pandang, kilau diagonal, tepi bercahaya, bayangan lembut. Visual mengikuti referensi brand. Yang sudah ada:
 
 **Empat layout**
 - `Hub` (default): klik pill, semua widget muncul sekaligus dan memenuhi layar: kolom kiri (Apps launcher, Clipboard), tengah atas (Media + CPU/RAM/baterai), kolom kanan (Focus timer, Quick Controls, File Shelf), dan dock aplikasi di bawah tengah. Bagian tengah layar dibiarkan kosong. Pill berubah jadi top bar. Klik area kosong atau top bar untuk menutup.
@@ -41,6 +41,21 @@ v1.11 — kaca hampir bening; theme (Violet, Aurora Mint, Sunset Coral) mengubah
 - Wi-Fi dan Bluetooth lewat WinRT radios, tampil N/A kalau tidak tersedia
 - Overlay singkat saat tombol volume hardware ditekan, lewat callback WASAPI
 - Overlay Caps Lock lewat low-level keyboard hook (tidak menelan tombol)
+
+**Privasi**
+- Titik hijau (kamera) dan oranye (mikrofon) di pill saat ada aplikasi yang memakainya, dibaca dari `CapabilityAccessManager` Windows tiap 2 detik
+- Saat aplikasi baru mulai memakai kamera/mic, pill menampilkan `CAMERA · Zoom` / `MIC · Discord` sebentar
+
+**Live Activities (CLI)**
+- Program atau script apa pun bisa menampilkan progres di island:
+  ```powershell
+  notch push "Build" --progress 40 --detail "cargo build --release"
+  notch push "Build" --done
+  notch push "Deploy" --fail --detail "exit code 1"
+  notch clear            # atau: notch clear "Build"
+  ```
+- Pill menampilkan aktivitas terbaru (ikon status, judul, persen, garis progres). Hub menampilkan sampai 3 aktivitas di kartu **Live Activities** di bawah kartu media
+- Aktivitas dengan judul yang sama diperbarui, bukan ditambah. Yang selesai/gagal hilang setelah 6 detik
 
 **Produktivitas**
 - Focus timer Pomodoro 25 menit, klik untuk start/pause, reset
@@ -196,6 +211,8 @@ src/
 ├─ netstatus.rs  WinRT radio status
 ├─ tasks.rs      tasks + water, JSON
 ├─ shelf.rs      file shelf, JSON
+├─ activity.rs  Live Activities + CLI push/clear
+├─ privacy.rs   indikator kamera/mikrofon
 ├─ apps.rs       pinned taskbar / Start Menu launcher
 ├─ clipboard.rs  clipboard history (memori)
 ├─ sysmon.rs     sampling CPU dan memori

@@ -314,6 +314,8 @@ pub enum OverlayKind {
     Caps,
     Water,
     Copied,
+    /// An app just started using the camera or microphone.
+    Privacy,
 }
 
 /// Transient compact-pill content shown after a hardware key event.
@@ -682,6 +684,19 @@ pub mod hub {
     pub fn dock_item(count: usize, index: usize) -> Rect {
         let dock = dock(count).unwrap_or(r(0.0, 0.0, 0.0, 0.0));
         r(dock.x + 8.0 + index as f32 * DOCK_ITEM + 4.0, dock.y + 10.0, 48.0, 48.0)
+    }
+
+    /// Live Activities card under the media card; only while any exist.
+    pub fn activities(count: usize) -> Option<Rect> {
+        if count == 0 {
+            return None;
+        }
+        let m = media();
+        Some(r(m.x, m.y + m.h + GAP, m.w, 48.0 + count as f32 * 52.0))
+    }
+    pub fn activity_row(index: usize) -> Rect {
+        let m = media();
+        r(m.x + 20.0, m.y + m.h + GAP + 44.0 + index as f32 * 52.0, m.w - 40.0, 44.0)
     }
 
     pub fn cards() -> [Rect; 6] {

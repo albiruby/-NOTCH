@@ -1,5 +1,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod activity;
 mod apps;
 mod audio;
 mod brightness;
@@ -7,6 +8,7 @@ mod clipboard;
 mod lyrics;
 mod media;
 mod netstatus;
+mod privacy;
 mod renderer;
 mod settings;
 mod shelf;
@@ -45,6 +47,7 @@ use windows::Win32::UI::Shell::{
     DragAcceptFiles, DragFinish, DragQueryFileW, DragQueryPoint, ShellExecuteW, HDROP,
 };
 use windows::Win32::UI::WindowsAndMessaging::*;
+use windows::Win32::System::DataExchange::COPYDATASTRUCT;
 
 use audio::Audio;
 use brightness::Brightness;
@@ -58,6 +61,9 @@ const TIMER_TICK: usize = 2;
 const TIMER_TRACE: usize = 3;
 const TIMER_OVERLAY: usize = 4;
 const TIMER_WATER: usize = 5;
+/// Camera/mic sampling and Live Activity expiry.
+const TIMER_PRIVACY: usize = 6;
+const PRIVACY_MS: u32 = 2000;
 const WM_APP_REFRESH: u32 = WM_APP + 1;
 const WM_APP_REDRAW: u32 = WM_APP + 2;
 const WM_APP_CAPS: u32 = WM_APP + 7;
@@ -115,6 +121,8 @@ struct App {
     shelf: shelf::Store,
     apps: Vec<apps::AppEntry>,
     clip_items: Vec<String>,
+    privacy: privacy::Privacy,
+    activities: activity::Store,
     editing: bool,
     edit_text: String,
     ex_style: isize,
@@ -193,6 +201,8 @@ impl App {
             water: self.tasks.water,
             water_goal: self.tasks.water_goal,
             clip_items: self.clip_items.clone(),
+            privacy: self.privacy.clone(),
+            activities: self.activities.items.clone(),
             editing: self.editing,
             edit_text: self.edit_text.clone(),
             opacity: self.settings.opacity.clamp(0.2, 1.0),
@@ -578,7 +588,9 @@ impl App {
             return;
         }
 
-        if hub::cards().iter().any(|card| card.contains(x, y)) {
+        if hub::cards().iter().any(|card| card.contains(x, y))
+            || hub::activities(self.activities.items.len()).is_some_and(|card| card.contains(x, y))
+        {
             return;
         }
         // Top bar or empty space closes the hub.
@@ -980,6 +992,8 @@ unsafe extern "system" fn notch_wndproc(
                 shelf: shelf::Store::load(),
                 apps: apps::load(),
                 clip_items: clipboard::snapshot(),
+                privacy: privacy::sample(),
+                activities: activity::Store::default(),
                 editing: false,
                 edit_text: String::new(),
                 ex_style: 0,
@@ -1010,6 +1024,7 @@ unsafe extern "system" fn notch_wndproc(
             }
             unsafe {
                 SetTimer(Some(hwnd), TIMER_WATER, 45 * 60 * 1000, None);
+                SetTimer(Some(hwnd), TIMER_PRIVACY, PRIVACY_MS, None);
             }
             let ptr = Box::into_raw(app);
             SetWindowLongPtrW(hwnd, GWLP_USERDATA, ptr as isize);
@@ -1167,6 +1182,20 @@ unsafe extern "system" fn notch_wndproc(
             if let Some(app) = app(hwnd) {
                 if app.editing {
                     app.end_task_edit(true);
+                }
+            }
+            LRESULT(0)
+        }
+        WM_COPYDATA => {
+            if let Some(app) = app(hwnd) {
+                let data = &*(lparam.0 as *const COPYDATASTRUCT);
+                if data.dwData == activity::COPYDATA_TAG && !data.lpData.is_null() {
+                    let bytes = std::slice::from_raw_parts(data.lpData as *const u8, data.cbData as usize);
+                    if let Ok(request) = serde_json::from_slice::<activity::Request>(bytes) {
+                        app.activities.apply(request);
+                        app.draw();
+                        return LRESULT(1);
+                    }
                 }
             }
             LRESULT(0)
@@ -1609,6 +1638,31 @@ unsafe extern "system" fn notch_wndproc(
                             KillTimer(Some(hwnd), TIMER_OVERLAY).ok();
                         }
                         if app.overlay.take().is_some() {
+                            app.draw();
+                        }
+                    }
+                    TIMER_PRIVACY => {
+                        let next = privacy::sample();
+                        let mut dirty = app.activities.expire();
+                        if next != app.privacy {
+                            // Announce an app that just started using the
+                            // camera or microphone.
+                            let started = next.cam.iter().chain(next.mic.iter()).any(|name| {
+                                !app.privacy.cam.contains(name) && !app.privacy.mic.contains(name)
+                            });
+                            app.privacy = next;
+                            dirty = true;
+                            if started {
+                                app.show_overlay(Overlay {
+                                    kind: OverlayKind::Privacy,
+                                    value: 0.0,
+                                    muted: false,
+                                    on: true,
+                                    goal: 0,
+                                });
+                            }
+                        }
+                        if dirty {
                             app.draw();
                         }
                     }
@@ -2092,7 +2146,40 @@ fn run() -> Result<()> {
     Ok(())
 }
 
+/// `notch push ...` / `notch clear ...`: forward to the running instance.
+fn send_activity(request: &activity::Request) -> i32 {
+    let Ok(payload) = serde_json::to_vec(request) else {
+        return 1;
+    };
+    unsafe {
+        let Ok(target) = FindWindowW(w!("NotchSurface"), None) else {
+            eprintln!("notch is not running");
+            return 2;
+        };
+        let data = COPYDATASTRUCT {
+            dwData: activity::COPYDATA_TAG,
+            cbData: payload.len() as u32,
+            lpData: payload.as_ptr() as *mut core::ffi::c_void,
+        };
+        let handled = SendMessageW(
+            target,
+            WM_COPYDATA,
+            Some(WPARAM(0)),
+            Some(LPARAM(&data as *const COPYDATASTRUCT as isize)),
+        );
+        if handled.0 == 1 {
+            0
+        } else {
+            1
+        }
+    }
+}
+
 fn main() {
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    if let Some(request) = activity::parse(&args) {
+        std::process::exit(send_activity(&request));
+    }
     if let Err(err) = run() {
         eprintln!("notch failed: {err}");
         std::process::exit(1);

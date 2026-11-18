@@ -75,6 +75,8 @@ pub struct DrawParams {
     pub opacity: f32,
     pub show_clock: bool,
     pub mode: crate::state::SurfaceMode,
+    pub privacy: crate::privacy::Privacy,
+    pub activities: Vec<crate::activity::Activity>,
 }
 
 pub struct Renderer {
@@ -444,6 +446,7 @@ impl Renderer {
                             format!("DRINK WATER  {done}/{}", overlay.goal)
                         }
                         crate::state::OverlayKind::Copied => "COPIED".to_string(),
+                        crate::state::OverlayKind::Privacy => p.privacy.label(),
                     };
                     let has_bar = matches!(
                         overlay.kind,
@@ -535,7 +538,36 @@ impl Renderer {
                     if lens_pad > 0.0 {
                         draw_lens(ctx, shape.right() - 17.0, center_y, s, compact_alpha)?;
                     }
-                    if p.media.available && mid_right - mid_left > 40.0 {
+                    // Privacy dots sit in the free space left of the clock
+                    // (camera green, microphone orange, like iOS).
+                    let mut dot_x = shape.right() - 14.0 - lens_pad - time_w + 6.0;
+                    let mut mid_right = mid_right;
+                    for (on, color) in [
+                        (!p.privacy.cam.is_empty(), theme::color::SUCCESS),
+                        (!p.privacy.mic.is_empty(), theme::color::WARNING),
+                    ] {
+                        if on {
+                            let dot = solid(ctx, &theme::rgb(color, compact_alpha))?;
+                            ctx.FillEllipse(&circle(dot_x * s, center_y * s, 3.2 * s), &dot);
+                            dot_x += 9.0;
+                            mid_right = mid_right.min(dot_x - 14.0);
+                        }
+                    }
+
+                    if let Some(activity) = p.activities.first().filter(|_| mid_right - mid_left > 40.0) {
+                        draw_activity_inline(
+                            ctx,
+                            &self.fmt_icon_sm,
+                            &self.fmt_pill_title,
+                            activity,
+                            mid_left,
+                            mid_right,
+                            visible_top,
+                            shape.bottom(),
+                            s,
+                            compact_alpha,
+                        )?;
+                    } else if p.media.available && mid_right - mid_left > 40.0 {
                         let art_size = (mark_r * 2.0).min(20.0);
                         if let Some(art) = &self.art_bitmap {
                             draw_rounded_art(
@@ -1793,6 +1825,17 @@ impl Renderer {
                 };
                 draw_text(ctx, "\u{E701}", &self.fmt_icon, scaled_rect(sys_x + 108.0, cy - 12.0, 24.0, 24.0, s), &on(p.net.wifi)?);
                 draw_text(ctx, "\u{E702}", &self.fmt_icon, scaled_rect(sys_x + 136.0, cy - 12.0, 24.0, 24.0, s), &on(p.net.bluetooth)?);
+                let mut dot_x = sys_x + 170.0;
+                for (on, color) in [
+                    (!p.privacy.cam.is_empty(), theme::color::SUCCESS),
+                    (!p.privacy.mic.is_empty(), theme::color::WARNING),
+                ] {
+                    if on {
+                        let dot = solid(ctx, &theme::rgb(color, panel_alpha))?;
+                        ctx.FillEllipse(&circle(dot_x * s, cy * s, 3.5 * s), &dot);
+                        dot_x += 10.0;
+                    }
+                }
 
                 let right = x + w - 44.0;
                 draw_text(ctx, &p.date, &self.fmt_time_right, scaled_rect(right - 120.0, cy - 15.0, 120.0, 14.0, s), &sub);
@@ -2215,6 +2258,20 @@ impl Renderer {
                 draw_text(ctx, label, &self.fmt_tab, scaled_rect(rect.x, rect.y, rect.w, rect.h, s), &primary);
             }
             draw_slider(ctx, f.x + 20.0, f.y + 124.0, f.w - 40.0, 1.0 - p.focus_remaining / 1500.0, false, s, 1.0)?;
+
+            // Live Activities, under the media card.
+            if let Some(card) = hub::activities(p.activities.len()) {
+                draw_glass(ctx, scaled_rect(card.x, card.y, card.w, card.h, s), 20.0 * s, p.opacity, Glass::Card, s)?;
+                draw_text(ctx, "Live Activities", &self.fmt_card_title, scaled_rect(card.x + 20.0, card.y + 12.0, 200.0, 22.0, s), &primary);
+                if p.privacy.active() {
+                    let warn = solid(ctx, &theme::rgb(theme::color::WARNING, 1.0))?;
+                    draw_text(ctx, &p.privacy.label(), &self.fmt_small, scaled_rect(card.x + 180.0, card.y + 12.0, card.w - 200.0, 22.0, s), &warn);
+                }
+                for (index, activity) in p.activities.iter().enumerate() {
+                    let row = hub::activity_row(index);
+                    draw_activity_row(ctx, &self.fmt_icon_sm, &self.fmt_wide_title, &self.fmt_small, activity, row, s)?;
+                }
+            }
 
             // Dock.
             let docked = p.apps.len().min(hub::DOCK_MAX);
@@ -2901,5 +2958,88 @@ unsafe fn draw_lens(ctx: &ID2D1DeviceContext, cx: f32, cy: f32, s: f32, alpha: f
     ctx.FillEllipse(&circle(cx * s, cy * s, 2.0 * s), &pupil);
     let glint = solid(ctx, &theme::rgb(0x8FA3FF, 0.55 * alpha))?;
     ctx.FillEllipse(&circle((cx - 1.4) * s, (cy - 1.4) * s, 0.9 * s), &glint);
+    Ok(())
+}
+
+fn activity_glyph(status: crate::activity::Status) -> (&'static str, u32) {
+    match status {
+        crate::activity::Status::Running => ("\u{E895}", theme::accent::c500()),
+        crate::activity::Status::Done => ("\u{E73E}", theme::color::SUCCESS),
+        crate::activity::Status::Failed => ("\u{E711}", theme::color::DANGER),
+    }
+}
+
+/// One Live Activity squeezed into the compact pill: status glyph, title,
+/// and a hairline progress bar along the bottom of the text area.
+#[allow(clippy::too_many_arguments)]
+unsafe fn draw_activity_inline(
+    ctx: &ID2D1DeviceContext,
+    fmt_icon: &IDWriteTextFormat,
+    fmt_title: &IDWriteTextFormat,
+    activity: &crate::activity::Activity,
+    left: f32,
+    right: f32,
+    top: f32,
+    bottom: f32,
+    s: f32,
+    alpha: f32,
+) -> Result<()> {
+    let (glyph, color) = activity_glyph(activity.status);
+    let icon = solid(ctx, &theme::rgb(color, alpha))?;
+    draw_text(ctx, glyph, fmt_icon, scaled_rect(left, top, 16.0, bottom - top, s), &icon);
+    let title = solid(ctx, &theme::rgb(theme::accent::text1(), alpha))?;
+    let label = match activity.progress {
+        Some(p) if activity.status == crate::activity::Status::Running => {
+            format!("{}  {:.0}%", activity.title, p * 100.0)
+        }
+        _ => activity.title.clone(),
+    };
+    draw_text(ctx, &label, fmt_title, scaled_rect(left + 20.0, top, right - left - 20.0, bottom - top, s), &title);
+    if let Some(progress) = activity.progress {
+        let bar_y = bottom - 6.0;
+        let w = right - left - 20.0;
+        let track = solid(ctx, &theme::rgb(theme::accent::track(), alpha))?;
+        ctx.FillRectangle(&scaled_rect(left + 20.0, bar_y, w, 2.0, s), &track);
+        let fill = solid(ctx, &theme::rgb(color, alpha))?;
+        ctx.FillRectangle(&scaled_rect(left + 20.0, bar_y, w * progress, 2.0, s), &fill);
+    }
+    Ok(())
+}
+
+/// One Live Activity row in the hub card.
+unsafe fn draw_activity_row(
+    ctx: &ID2D1DeviceContext,
+    fmt_icon: &IDWriteTextFormat,
+    fmt_title: &IDWriteTextFormat,
+    fmt_small: &IDWriteTextFormat,
+    activity: &crate::activity::Activity,
+    row: crate::state::Rect,
+    s: f32,
+) -> Result<()> {
+    let (glyph, color) = activity_glyph(activity.status);
+    draw_glass(ctx, scaled_rect(row.x, row.y + 4.0, 32.0, 32.0, s), 10.0 * s, 1.0, Glass::Tile, s)?;
+    let icon = solid(ctx, &theme::rgb(color, 1.0))?;
+    draw_text(ctx, glyph, fmt_icon, scaled_rect(row.x, row.y + 4.0, 32.0, 32.0, s), &icon);
+    let primary = solid(ctx, &theme::rgb(theme::accent::text1(), 1.0))?;
+    let muted = solid(ctx, &theme::rgb(theme::accent::muted(), 1.0))?;
+    let text_x = row.x + 44.0;
+    let text_w = row.w - 44.0 - 52.0;
+    draw_text(ctx, &activity.title, fmt_title, scaled_rect(text_x, row.y + 2.0, text_w, 18.0, s), &primary);
+    let detail = activity.detail.clone().unwrap_or_else(|| match activity.status {
+        crate::activity::Status::Running => "Running".into(),
+        crate::activity::Status::Done => "Done".into(),
+        crate::activity::Status::Failed => "Failed".into(),
+    });
+    draw_text(ctx, &detail, fmt_small, scaled_rect(text_x, row.y + 20.0, text_w, 14.0, s), &muted);
+    if let Some(progress) = activity.progress {
+        draw_text(
+            ctx,
+            &format!("{:.0}%", progress * 100.0),
+            fmt_small,
+            scaled_rect(row.x + row.w - 44.0, row.y + 2.0, 44.0, 18.0, s),
+            &primary,
+        );
+        draw_slider(ctx, text_x, row.y + 36.0, row.w - 44.0, progress, false, s, 1.0)?;
+    }
     Ok(())
 }
