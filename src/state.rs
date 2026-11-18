@@ -323,6 +323,8 @@ pub enum OverlayKind {
     Copied,
     /// An app just started using the camera or microphone.
     Privacy,
+    /// Battery is low and not charging, or back on power.
+    Battery,
 }
 
 /// Transient compact-pill content shown after a hardware key event.

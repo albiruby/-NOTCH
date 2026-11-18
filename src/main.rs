@@ -135,6 +135,7 @@ struct App {
     layout: Layout,
     battery: Option<u32>,
     charging: bool,
+    battery_warned: bool,
     wide_grace: Option<Instant>,
     press: Option<Press>,
     move_anim: Option<MoveAnim>,
@@ -1049,6 +1050,7 @@ unsafe extern "system" fn notch_wndproc(
                 layout,
                 battery,
                 charging,
+                battery_warned: false,
                 wide_grace: None,
                 press: None,
                 move_anim: None,
@@ -1754,6 +1756,24 @@ unsafe extern "system" fn notch_wndproc(
                                     on: true,
                                     goal: 0,
                                 });
+                            }
+                        }
+                        // Low-battery warning (works even while collapsed).
+                        let (level, charging) = battery_state();
+                        app.battery = level;
+                        app.charging = charging;
+                        if let Some(pct) = level {
+                            if pct <= 15 && !charging && !app.battery_warned {
+                                app.battery_warned = true;
+                                app.show_overlay(Overlay {
+                                    kind: OverlayKind::Battery,
+                                    value: pct as f32 / 100.0,
+                                    muted: false,
+                                    on: true,
+                                    goal: 0,
+                                });
+                            } else if charging || pct > 20 {
+                                app.battery_warned = false;
                             }
                         }
                         if dirty {

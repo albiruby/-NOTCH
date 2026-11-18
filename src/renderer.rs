@@ -455,6 +455,13 @@ impl Renderer {
                         }
                         crate::state::OverlayKind::Copied => "COPIED".to_string(),
                         crate::state::OverlayKind::Privacy => p.privacy.label(),
+                        crate::state::OverlayKind::Battery => {
+                            if overlay.on {
+                                format!("LOW BATTERY  {:.0}%", overlay.value * 100.0)
+                            } else {
+                                "CHARGING".to_string()
+                            }
+                        }
                     };
                     let has_bar = matches!(
                         overlay.kind,
