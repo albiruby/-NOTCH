@@ -4,13 +4,19 @@ mod activity;
 mod ai;
 mod ai_report;
 mod apps;
+mod ask;
 mod audio;
 mod brightness;
+mod calc;
 mod clipboard;
+mod companion;
+mod dragout;
+mod fonts;
 mod http;
 mod lyrics;
 mod media;
 mod netstatus;
+mod ocr;
 mod privacy;
 mod renderer;
 mod secrets;
@@ -32,7 +38,10 @@ use windows::core::{w, Result, PCWSTR};
 use windows::Win32::Foundation::{
     HANDLE, HINSTANCE, HWND, LPARAM, LRESULT, POINT, WAIT_EVENT, WAIT_OBJECT_0, WPARAM,
 };
-use windows::Win32::Graphics::Gdi::{BeginPaint, EndPaint, ScreenToClient, PAINTSTRUCT};
+use windows::Win32::Graphics::Gdi::{
+    BeginPaint, CombineRgn, CreateRectRgn, DeleteObject, EndPaint, ScreenToClient, SetWindowRgn,
+    PAINTSTRUCT, RGN_OR,
+};
 use windows::Win32::System::Com::{CoInitializeEx, COINIT_APARTMENTTHREADED};
 use windows::Win32::System::DataExchange::COPYDATASTRUCT;
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
@@ -68,6 +77,14 @@ const TIMER_TICK: usize = 2;
 const TIMER_TRACE: usize = 3;
 const TIMER_OVERLAY: usize = 4;
 const TIMER_WATER: usize = 5;
+const TIMER_LEAVE_CHECK: usize = 7;
+const TIMER_COMPANION: usize = 8;
+const HOTKEY_ASK: i32 = 1;
+const HOTKEY_OCR: i32 = 2;
+const COMPANION_MS: u32 = 500;
+const FOCUS_SECS: f32 = 25.0 * 60.0;
+const SHORT_BREAK_SECS: f32 = 5.0 * 60.0;
+const LONG_BREAK_SECS: f32 = 15.0 * 60.0;
 /// Camera/mic sampling and Live Activity expiry.
 const TIMER_PRIVACY: usize = 6;
 const PRIVACY_MS: u32 = 2000;
@@ -75,6 +92,8 @@ const WM_APP_REFRESH: u32 = WM_APP + 1;
 const WM_APP_REDRAW: u32 = WM_APP + 2;
 const WM_APP_CAPS: u32 = WM_APP + 7;
 const HOVER_MARGIN: f32 = 14.0;
+/// Widest the compact pill grows to fit a song title (DIPs).
+const PILL_MAX_W: f32 = 460.0;
 const FRAME_MS: i64 = 16;
 const OVERLAY_MS: u32 = 1500;
 
@@ -137,7 +156,26 @@ struct App {
     battery: Option<u32>,
     charging: bool,
     battery_warned: bool,
+    companion: companion::Companion,
+    overlay_text: String,
+    /// Pomodoro: round 1..=4, 0 focus / 1 short / 2 long break, phase length.
+    focus_round: u8,
+    focus_break: u8,
+    focus_total: f32,
+    focus_last: Instant,
+    companion_tick: u64,
     wide_grace: Option<Instant>,
+    /// Last window region applied, in client pixels, to skip redundant updates.
+    region: Vec<[i32; 4]>,
+    /// Last measured pill title and its width in DIPs.
+    pill_title: (String, f32),
+    /// Animated compact width and where it is heading.
+    pill_w: Spring,
+    pill_w_target: f32,
+    /// Shelf row pressed and where; a move past a few pixels drags it out.
+    shelf_press: Option<(usize, POINT)>,
+    /// Hover pop per app icon (dock, then launcher rows).
+    icon_pop: Vec<Spring>,
     press: Option<Press>,
     move_anim: Option<MoveAnim>,
     _tray: Tray,
@@ -173,7 +211,59 @@ impl App {
         changed
     }
 
+    /// Grow the compact pill to fit the now-playing title (within limits),
+    /// back to the configured width when nothing is playing.
+    fn fit_pill(&mut self) {
+        if self.layout == Layout::Cards {
+            return;
+        }
+        let full = Metrics::for_layout(&self.settings, self.layout);
+        let message = self.overlay.is_some_and(|o| o.kind == OverlayKind::Message);
+        // Minimal notch: a thin line, back to full height for any overlay.
+        let thin = self.settings.minimal && self.overlay.is_none();
+        self.metrics.compact_h = if thin { 6.0 } else { full.compact_h };
+        self.metrics.compact_r = if thin { 3.0 } else { full.compact_r };
+        let base = if thin { 150.0 } else { full.compact_w };
+        let media = media::snapshot();
+        let want = if message {
+            let w = self.renderer.pill_title_width(&self.overlay_text, self.scale);
+            (w * 1.15 + 48.0).ceil()
+        } else if thin || self.companion.eyes != companion::Eyes::Hidden {
+            base
+        } else if self.settings.show_clock && media.available && self.activities.items.is_empty() {
+            if self.pill_title.0 != media.title {
+                let w = self.renderer.pill_title_width(&media.title, self.scale);
+                self.pill_title = (media.title.clone(), w);
+            }
+            let lens = if self.settings.mode == SurfaceMode::IslandPro { 18.0 } else { 0.0 };
+            // logo + gap, artwork + gap, title, gap, clock, edge padding.
+            let chrome = 46.0 + 30.0 + 8.0 + 54.0 + 14.0 + lens;
+            (chrome + self.pill_title.1).ceil()
+        } else {
+            base
+        };
+        let max = (self.metrics.surface_w - HOVER_MARGIN * 2.0).min(PILL_MAX_W);
+        let want = want.clamp(base, max.max(base));
+        if (want - self.pill_w_target).abs() > 0.5 {
+            self.pill_w_target = want;
+            if self.pill_w.value <= 1.0 {
+                // First measurement: no animation from zero.
+                self.pill_w = Spring::new(want);
+            } else {
+                self.pill_w.set_target(want);
+                if !self.animating {
+                    self.animating = true;
+                    self.last_frame = Instant::now();
+                    arm_anim_timer();
+                }
+            }
+        }
+        // Metrics are rebuilt on layout/mode changes; keep the animated width.
+        self.metrics.compact_w = self.pill_w.value;
+    }
+
     fn draw(&mut self) {
+        self.fit_pill();
         let shape = self.state.shape(&self.metrics);
         if std::env::args().any(|arg| arg == "--trace-shape") {
             log(&format!(
@@ -200,6 +290,14 @@ impl App {
             page: self.page,
             focus_remaining: self.focus_remaining,
             focus_running: self.focus_running,
+            overlay_text: self.overlay_text.clone(),
+            week: companion::week(&unsafe { GetLocalTime() }),
+            focus_round: self.focus_round,
+            focus_break: self.focus_break,
+            focus_total: self.focus_total,
+            eyes: self.companion.eyes,
+            icon_pop: self.icon_pop.iter().map(|sp| sp.value).collect(),
+            minimal: self.settings.minimal,
             overlay: self.overlay,
             lyrics: lyrics::snapshot(),
             layout: self.layout,
@@ -236,6 +334,66 @@ impl App {
             eprintln!("draw failed: {err}");
             log(&format!("draw failed: {err}"));
         }
+        self.update_region();
+    }
+
+    /// Rectangles (DIPs) of the parts of the window that take input.
+    fn input_rects(&self) -> Vec<state::Rect> {
+        if self.layout == Layout::Hub && self.state.phase == Phase::Expanded {
+            return vec![state::Rect {
+                x: 0.0,
+                y: 0.0,
+                w: self.metrics.surface_w,
+                h: self.metrics.surface_h,
+            }];
+        }
+        if self.layout == Layout::Cards {
+            return vec![state::quick_card(), state::shelf_card()];
+        }
+        let s = self.state.hit_shape(&self.metrics);
+        vec![state::Rect {
+            x: s.x - HOVER_MARGIN,
+            y: s.y - HOVER_MARGIN,
+            w: s.w + HOVER_MARGIN * 2.0,
+            h: s.h + HOVER_MARGIN * 2.0,
+        }]
+    }
+
+    /// Limit the window to its interactive area. The window is often much
+    /// larger than what is drawn (the hub canvas covers the whole work area),
+    /// and HTTRANSPARENT only forwards clicks to windows of the same thread,
+    /// so without a region the transparent part swallows clicks meant for
+    /// other applications.
+    fn update_region(&mut self) {
+        let (sw, sh) = self.surface_px();
+        let rects: Vec<[i32; 4]> = self
+            .input_rects()
+            .iter()
+            .map(|r| {
+                [
+                    ((r.x * self.scale).floor() as i32).clamp(0, sw),
+                    ((r.y * self.scale).floor() as i32).clamp(0, sh),
+                    (((r.x + r.w) * self.scale).ceil() as i32).clamp(0, sw),
+                    (((r.y + r.h) * self.scale).ceil() as i32).clamp(0, sh),
+                ]
+            })
+            .collect();
+        if rects == self.region {
+            return;
+        }
+        unsafe {
+            let rgn = CreateRectRgn(0, 0, 0, 0);
+            for r in &rects {
+                let part = CreateRectRgn(r[0], r[1], r[2], r[3]);
+                CombineRgn(Some(rgn), Some(rgn), Some(part), RGN_OR);
+                let _ = DeleteObject(part.into());
+            }
+            // The system owns the region after a successful call.
+            if SetWindowRgn(self.hwnd, Some(rgn), true) == 0 {
+                let _ = DeleteObject(rgn.into());
+            }
+        }
+        self.region = rects;
     }
 
     fn set_phase(&mut self, phase: Phase) {
@@ -255,7 +413,7 @@ impl App {
                 SetTimer(Some(self.hwnd), TIMER_TICK, 1000, None);
             }
         } else {
-            media::set_active(false);
+            // Media stays active: the compact pill shows the song title.
             netstatus::set_active(false);
             lyrics::set_active(false);
             unsafe {
@@ -284,8 +442,22 @@ impl App {
         let dt = (now - self.last_frame).as_secs_f32().clamp(0.001, 0.033);
         self.last_frame = now;
 
-        let mut moving = self.spring.step(dt);
+        // Slightly underdamped: the surface eases out with a soft settle
+        // instead of stopping dead.
+        let mut moving = self.spring.step_with(
+            dt,
+            crate::theme::motion::MORPH_OMEGA,
+            crate::theme::motion::MORPH_ZETA,
+        );
         self.state.t = self.spring.value;
+        // Icon hover pop: a quick, slightly bouncy spring.
+        for sp in &mut self.icon_pop {
+            moving |= sp.step_with(dt, 26.0, 0.5);
+        }
+        if self.layout != Layout::Cards && self.pill_w.value > 1.0 {
+            moving |= self.pill_w.step_with(dt, 18.0, 0.9);
+            self.metrics.compact_w = self.pill_w.value;
+        }
         if let Some(anim) = &mut self.move_anim {
             let still = anim.spring.step_with(
                 dt,
@@ -535,6 +707,23 @@ impl App {
             }
         }
 
+        // Launcher search bar: hand off to Windows search.
+        let l = hub::launcher();
+        if (state::Rect { x: l.x + 12.0, y: l.y + 14.0, w: l.w - 24.0, h: 40.0 }).contains(x, y) {
+            self.set_phase(Phase::Compact);
+            open_windows_search();
+            return;
+        }
+
+        // AI cockpit Setup/Live chip: open a console with the key commands.
+        let ai_card = hub::ai();
+        if (state::Rect { x: ai_card.x + ai_card.w - 84.0, y: ai_card.y + 13.0, w: 64.0, h: 22.0 })
+            .contains(x, y)
+        {
+            open_ai_setup();
+            return;
+        }
+
         // Launcher.
         for index in 0..hub::app_rows() {
             if hub::app_row(index).contains(x, y) {
@@ -579,8 +768,7 @@ impl App {
             return;
         }
         if hub::focus_reset().contains(x, y) {
-            self.focus_remaining = 1500.0;
-            self.focus_running = false;
+            self.focus_reset();
             self.draw();
             return;
         }
@@ -589,6 +777,27 @@ impl App {
         let hits = state::card_hits();
         let (qx, qy) = (x - hub::quick_offset().0, y - hub::quick_offset().1);
         if hub::quick().contains(x, y) {
+            // Wi-Fi / Bluetooth tiles: toggle the radio, or open Settings
+            // when the radio is not exposed to desktop apps.
+            for (index, wifi) in [(0usize, true), (1, false)] {
+                let tile = state::Rect {
+                    x: 32.0 + index as f32 * 184.0,
+                    y: 46.0,
+                    w: 176.0,
+                    h: 30.0,
+                };
+                if tile.contains(qx, qy) {
+                    if !netstatus::toggle(wifi) {
+                        open_uri(if wifi {
+                            w!("ms-settings:network-wifi")
+                        } else {
+                            w!("ms-settings:bluetooth")
+                        });
+                    }
+                    self.draw();
+                    return;
+                }
+            }
             if hits.focus.contains(qx, qy) {
                 self.focus_running = !self.focus_running;
                 if self.focus_running {
@@ -622,6 +831,26 @@ impl App {
                 }
             }
             return;
+        }
+
+        // Today card: water glasses and task check marks.
+        for i in 0..self.tasks.water_goal.clamp(1, 8) as usize {
+            if hub::water_dot(i).contains(x, y) {
+                let n = i as u32 + 1;
+                // Clicking the last filled glass empties it again.
+                self.tasks.water = if self.tasks.water == n { n - 1 } else { n };
+                self.tasks.save();
+                self.draw();
+                return;
+            }
+        }
+        for i in 0..hub::TODAY_TASKS.min(self.tasks.tasks.len()) {
+            if hub::today_task(i).contains(x, y) {
+                self.tasks.tasks[i].done = !self.tasks.tasks[i].done;
+                self.tasks.save();
+                self.draw();
+                return;
+            }
         }
 
         if hub::cards().iter().any(|card| card.contains(x, y))
@@ -730,6 +959,46 @@ impl App {
         self.draw();
     }
 
+    /// In the hub layout, hovering the pill shows the wide now-playing bar
+    /// as a peek; the full hub only opens on click.
+    fn peeking(&self) -> bool {
+        self.settings.layout == Layout::Hub && self.layout == Layout::Wide
+    }
+
+    fn peek_open(&mut self) {
+        if self.settings.layout == Layout::Hub
+            && self.layout == Layout::Hub
+            && self.state.phase == Phase::Compact
+        {
+            self.apply_layout(Layout::Wide, false);
+            self.wide_grace = Some(Instant::now());
+            self.set_phase(Phase::Expanded);
+        }
+    }
+
+    fn open_hub_from_peek(&mut self) {
+        self.apply_layout(Layout::Hub, false);
+        self.set_phase(Phase::Expanded);
+        // The wide bar was fully open; restart the hub from part-way so the
+        // top bar morphs and the cards rise in instead of popping.
+        self.spring = Spring::new(0.35);
+        self.spring.set_target(1.0);
+        self.state.t = 0.35;
+        if !self.animating {
+            self.animating = true;
+            self.last_frame = Instant::now();
+            arm_anim_timer();
+        }
+        ai::refresh_if_stale();
+        self.draw();
+    }
+
+    /// Hover layouts collapse on leave. A hub peek shrinks as the wide bar
+    /// and switches back to the hub once the animation lands (tick_anim).
+    fn collapse(&mut self) {
+        self.set_phase(Phase::Compact);
+    }
+
     fn open_panel(&mut self) {
         if self.layout != Layout::Panel {
             self.apply_layout(Layout::Panel, false);
@@ -776,6 +1045,125 @@ impl App {
         }
         self.brightness_level = level;
         self.draw();
+    }
+
+    /// Point the icon springs at 1.18 for the hovered app, 1.0 elsewhere.
+    fn hover_icons(&mut self, x: f32, y: f32) {
+        use state::hub;
+        let docked = self.apps.len().min(hub::DOCK_MAX);
+        let mut hot = None;
+        for i in 0..docked {
+            if hub::dock_item(docked, i).contains(x, y) {
+                hot = Some(i);
+            }
+        }
+        for i in 0..hub::app_rows().min(self.apps.len()) {
+            if hub::app_row(i).contains(x, y) {
+                hot = Some(hub::DOCK_MAX + i);
+            }
+        }
+        let mut changed = false;
+        for (i, sp) in self.icon_pop.iter_mut().enumerate() {
+            let want = if hot == Some(i) { 1.18 } else { 1.0 };
+            if (sp.target() - want).abs() > 0.001 {
+                sp.set_target(want);
+                changed = true;
+            }
+        }
+        if changed && !self.animating {
+            self.animating = true;
+            self.last_frame = Instant::now();
+            arm_anim_timer();
+        }
+    }
+
+    /// Shelf file row under (x, y) in the hub or the Cards layout.
+    fn shelf_row_at(&self, x: f32, y: f32) -> Option<usize> {
+        let hits = state::card_hits();
+        let (sx, sy) = match self.layout {
+            Layout::Hub if self.state.phase == Phase::Expanded => {
+                if !state::hub::shelf().contains(x, y) {
+                    return None;
+                }
+                let (ox, oy) = state::hub::shelf_offset();
+                (x - ox, y - oy)
+            }
+            Layout::Cards => (x, y),
+            _ => return None,
+        };
+        hits.rows
+            .iter()
+            .position(|row| row.contains(sx, sy))
+            .filter(|&i| i < self.shelf.paths.len())
+    }
+
+    /// Flash free text in the pill (to-do, charger, network, …).
+    fn show_message(&mut self, text: String, ms: u32) {
+        if self.hidden_by_user || self.hidden_by_fullscreen || self.state.phase == Phase::Expanded {
+            return;
+        }
+        self.overlay_text = text;
+        self.overlay = Some(Overlay {
+            kind: OverlayKind::Message,
+            value: 0.0,
+            muted: false,
+            on: true,
+            goal: 0,
+        });
+        unsafe {
+            SetTimer(Some(self.hwnd), TIMER_OVERLAY, ms, None);
+        }
+        self.draw();
+    }
+
+    fn handle_events(&mut self, events: Vec<companion::Event>) {
+        for event in events {
+            match event {
+                companion::Event::Message(text, ms) => self.show_message(text, ms),
+            }
+        }
+    }
+
+    /// Back to round 1, full focus length, paused.
+    fn focus_reset(&mut self) {
+        self.focus_running = false;
+        self.focus_round = 1;
+        self.focus_break = 0;
+        self.focus_total = FOCUS_SECS;
+        self.focus_remaining = FOCUS_SECS;
+    }
+
+    /// Advance the Pomodoro by real elapsed time, whether or not the hub is
+    /// open. A finished focus round starts its break; a finished break
+    /// waits for the user to start the next round.
+    fn focus_tick(&mut self) -> bool {
+        let now = Instant::now();
+        let dt = (now - self.focus_last).as_secs_f32();
+        self.focus_last = now;
+        if !self.focus_running {
+            return false;
+        }
+        self.focus_remaining = (self.focus_remaining - dt).max(0.0);
+        if self.focus_remaining > 0.0 {
+            return self.state.phase == Phase::Expanded;
+        }
+        if self.focus_break == 0 {
+            let long = self.focus_round >= 4;
+            self.focus_break = if long { 2 } else { 1 };
+            self.focus_total = if long { LONG_BREAK_SECS } else { SHORT_BREAK_SECS };
+            self.focus_remaining = self.focus_total;
+            let label = if long { "LONG BREAK  15 MIN" } else { "BREAK  5 MIN" };
+            self.show_message(format!("FOCUS {} OF 4 DONE  ·  {label}", self.focus_round), 4000);
+        } else {
+            let was_long = self.focus_break == 2;
+            self.focus_round = if was_long { 1 } else { self.focus_round + 1 };
+            self.focus_break = 0;
+            self.focus_total = FOCUS_SECS;
+            self.focus_remaining = FOCUS_SECS;
+            self.focus_running = false;
+            self.show_message(format!("BREAK OVER  ·  FOCUS {} OF 4", self.focus_round), 4000);
+        }
+        true
     }
 
     fn show_overlay(&mut self, overlay: Overlay) {
@@ -1006,6 +1394,30 @@ unsafe extern "system" fn notch_wndproc(
             weather::start(hwnd);
             unsafe {
                 DragAcceptFiles(hwnd, true);
+                // Ctrl+Alt+Space: Ask.  Ctrl+Alt+T: Smart OCR.
+                {
+                    use windows::Win32::UI::Input::KeyboardAndMouse::{
+                        RegisterHotKey, MOD_ALT, MOD_CONTROL, MOD_NOREPEAT, VK_SPACE,
+                    };
+                    let mods = MOD_CONTROL | MOD_ALT | MOD_NOREPEAT;
+                    // Another app may own Ctrl+Alt+Space; fall back in order.
+                    use windows::Win32::UI::Input::KeyboardAndMouse::MOD_SHIFT;
+                    let ask_keys = [
+                        (mods, "Ctrl+Alt+Space"),
+                        (MOD_CONTROL | MOD_SHIFT | MOD_NOREPEAT, "Ctrl+Shift+Space"),
+                        (MOD_ALT | MOD_SHIFT | MOD_NOREPEAT, "Alt+Shift+Space"),
+                    ];
+                    let taken = ask_keys.iter().find(|(m, _)| {
+                        RegisterHotKey(Some(hwnd), HOTKEY_ASK, *m, VK_SPACE.0 as u32).is_ok()
+                    });
+                    match taken {
+                        Some((_, label)) => log(&format!("Ask hotkey: {label}")),
+                        None => log("no Ask hotkey available; use the tray menu"),
+                    }
+                    if RegisterHotKey(Some(hwnd), HOTKEY_OCR, mods, b'T' as u32).is_err() {
+                        log("hotkey Ctrl+Alt+T is taken by another app");
+                    }
+                }
             }
 
             let audio = Audio::new(hwnd).ok();
@@ -1060,7 +1472,20 @@ unsafe extern "system" fn notch_wndproc(
                 battery,
                 charging,
                 battery_warned: false,
+                companion: companion::Companion::default(),
+                overlay_text: String::new(),
+                focus_round: 1,
+                focus_break: 0,
+                focus_total: FOCUS_SECS,
+                focus_last: Instant::now(),
+                companion_tick: 0,
                 wide_grace: None,
+                region: Vec::new(),
+                pill_title: (String::new(), 0.0),
+                pill_w: Spring::new(0.0),
+                pill_w_target: 0.0,
+                shelf_press: None,
+                icon_pop: (0..state::hub::DOCK_MAX + state::hub::APP_ROWS).map(|_| Spring::new(1.0)).collect(),
                 press: None,
                 move_anim: None,
                 _tray: tray,
@@ -1084,7 +1509,9 @@ unsafe extern "system" fn notch_wndproc(
             }
             unsafe {
                 SetTimer(Some(hwnd), TIMER_WATER, 45 * 60 * 1000, None);
+                media::set_active(true);
                 SetTimer(Some(hwnd), TIMER_PRIVACY, PRIVACY_MS, None);
+                SetTimer(Some(hwnd), TIMER_COMPANION, COMPANION_MS, None);
             }
             let ptr = Box::into_raw(app);
             SetWindowLongPtrW(hwnd, GWLP_USERDATA, ptr as isize);
@@ -1136,6 +1563,28 @@ unsafe extern "system" fn notch_wndproc(
                 let x = x_lparam(lparam) / app.scale;
                 let y = y_lparam(lparam) / app.scale;
 
+                if let Some((index, start)) = app.shelf_press {
+                    let mut cursor = POINT::default();
+                    let _ = GetCursorPos(&mut cursor);
+                    let (dx, dy) = (cursor.x - start.x, cursor.y - start.y);
+                    if dx * dx + dy * dy > 36 {
+                        app.shelf_press = None;
+                        let _ = ReleaseCapture();
+                        if let Some(path) = app.shelf.paths.get(index).cloned() {
+                            // The open hub covers the screen; put it away so
+                            // the windows underneath can take the drop.
+                            if app.layout == Layout::Hub {
+                                app.set_phase(Phase::Compact);
+                                app.state.t = 0.0;
+                                app.spring = Spring::new(0.0);
+                                app.draw();
+                            }
+                            // Blocks in the OLE drag loop until drop/cancel.
+                            dragout::drag_file(&path);
+                        }
+                        return LRESULT(0);
+                    }
+                }
                 if app.dragging_volume || app.dragging_brightness {
                     app.press = None;
                 }
@@ -1195,6 +1644,16 @@ unsafe extern "system" fn notch_wndproc(
                     }
 
                     if app.layout == Layout::Hub {
+                        // Hover peeks at now-playing; a click opens the hub.
+                        if app.state.phase == Phase::Expanded {
+                            app.hover_icons(x, y);
+                        }
+                        if app.state.phase == Phase::Compact
+                            && app.press.is_none()
+                            && app.hit(x, y)
+                        {
+                            app.peek_open();
+                        }
                         return LRESULT(0);
                     }
                     match app.state.phase {
@@ -1202,7 +1661,7 @@ unsafe extern "system" fn notch_wndproc(
                         Phase::Expanded
                             if !app.hit_with_margin(x, y) && !app.wide_grace_active() =>
                         {
-                            app.set_phase(Phase::Compact);
+                            app.collapse();
                         }
                         _ => {}
                     }
@@ -1248,6 +1707,28 @@ unsafe extern "system" fn notch_wndproc(
                 }
             }
             DefWindowProcW(hwnd, msg, wparam, lparam)
+        }
+        WM_HOTKEY => {
+            match wparam.0 as i32 {
+                HOTKEY_ASK => ask::toggle(),
+                HOTKEY_OCR => ocr::start(hwnd),
+                _ => {}
+            }
+            LRESULT(0)
+        }
+        ocr::WM_APP_OCR => {
+            if let Some(app) = app(hwnd) {
+                match ocr::take() {
+                    Some(Ok(text)) => {
+                        clipboard::copy(hwnd, &text);
+                        let words = text.split_whitespace().count();
+                        app.show_message(format!("TEXT COPIED  ·  {words} WORDS"), 2500);
+                    }
+                    Some(Err(message)) => app.show_message(message.to_uppercase(), 3500),
+                    None => {}
+                }
+            }
+            LRESULT(0)
         }
         WM_KILLFOCUS => {
             if let Some(app) = app(hwnd) {
@@ -1329,6 +1810,13 @@ unsafe extern "system" fn notch_wndproc(
             if let Some(app) = app(hwnd) {
                 let x = x_lparam(lparam) / app.scale;
                 let y = y_lparam(lparam) / app.scale;
+                // A press on a shelf file may become a drag out of NOTCH.
+                if let Some(index) = app.shelf_row_at(x, y) {
+                    let mut cursor = POINT::default();
+                    let _ = GetCursorPos(&mut cursor);
+                    app.shelf_press = Some((index, cursor));
+                    let _ = SetCapture(hwnd);
+                }
                 // Any press on the island itself may become a drag.
                 if app.island_free() && app.state.hit_shape(&app.metrics).contains(x, y) {
                     let mut cursor = POINT::default();
@@ -1421,8 +1909,28 @@ unsafe extern "system" fn notch_wndproc(
         WM_MOUSELEAVE => {
             if let Some(app) = app(hwnd) {
                 app.tracking_leave = false;
-                if !app.editing && app.layout != Layout::Hub {
-                    app.set_phase(Phase::Compact);
+                // Resizing the window (a hub peek switching to the wide bar)
+                // posts a leave even with the cursor still on the bar, so
+                // check where the cursor really is.
+                let mut pt = POINT::default();
+                let _ = GetCursorPos(&mut pt);
+                let _ = ScreenToClient(hwnd, &mut pt);
+                let still_over = app.hit_with_margin(pt.x as f32 / app.scale, pt.y as f32 / app.scale);
+                if !app.editing && app.layout != Layout::Hub && !still_over && !app.wide_grace_active() {
+                    app.collapse();
+                } else if !still_over {
+                    // Left during the grace period: look again once it ends.
+                    SetTimer(Some(hwnd), TIMER_LEAVE_CHECK, 850, None);
+                } else {
+                    // Keep listening so the real leave still collapses it.
+                    let mut tme = TRACKMOUSEEVENT {
+                        cbSize: std::mem::size_of::<TRACKMOUSEEVENT>() as u32,
+                        dwFlags: TME_LEAVE,
+                        hwndTrack: hwnd,
+                        dwHoverTime: 0,
+                    };
+                    let _ = TrackMouseEvent(&mut tme);
+                    app.tracking_leave = true;
                 }
             }
             LRESULT(0)
@@ -1431,6 +1939,10 @@ unsafe extern "system" fn notch_wndproc(
             if let Some(app) = app(hwnd) {
                 let x = x_lparam(lparam) / app.scale;
                 let y = y_lparam(lparam) / app.scale;
+                if app.shelf_press.take().is_some() {
+                    // No drag happened: fall through to a normal click.
+                    let _ = ReleaseCapture();
+                }
                 if let Some(press) = app.press.take() {
                     if !app.dragging_volume && !app.dragging_brightness {
                         let _ = ReleaseCapture();
@@ -1509,6 +2021,11 @@ unsafe extern "system" fn notch_wndproc(
                     let _ = ReleaseCapture();
                     return LRESULT(0);
                 }
+                if app.peeking() && app.state.t <= 0.5 {
+                    // Clicked while the peek is still growing: open the hub.
+                    app.open_hub_from_peek();
+                    return LRESULT(0);
+                }
                 if app.state.phase == Phase::Expanded && app.state.t > 0.5 {
                     let shape = app.state.shape(&app.metrics);
                     if app.layout == Layout::Wide {
@@ -1534,7 +2051,11 @@ unsafe extern "system" fn notch_wndproc(
                             }
                             return LRESULT(0);
                         }
-                        app.open_panel();
+                        if app.peeking() {
+                            app.open_hub_from_peek();
+                        } else {
+                            app.open_panel();
+                        }
                         return LRESULT(0);
                     }
                     if app.editing && !state::task_add(&shape).contains(x, y) {
@@ -1661,13 +2182,28 @@ unsafe extern "system" fn notch_wndproc(
                             return LRESULT(0);
                         }
                         if state::focus_reset(&shape).contains(x, y) {
-                            app.focus_remaining = 1500.0;
-                            app.focus_running = false;
+                            app.focus_reset();
                             app.draw();
                             return LRESULT(0);
                         }
                     }
                     if app.page == 0 {
+                        // Click a lyric line to jump to it.
+                        let m = media::snapshot();
+                        let lyrics = lyrics::snapshot();
+                        if let Some(current) = lyrics.index_at(m.position) {
+                            for offset in [-1i32, 0, 1] {
+                                let index = current as i32 + offset;
+                                if index < 0 || index as usize >= lyrics.lines.len() {
+                                    continue;
+                                }
+                                if state::lyric_row(&shape, offset).contains(x, y) {
+                                    let at = lyrics.lines[index as usize].at;
+                                    media::send(media::Command::Seek(at.max(0.0)));
+                                    return LRESULT(0);
+                                }
+                            }
+                        }
                         let progress = state::progress_bar(&shape);
                         if progress.contains(x, y) {
                             let ratio = ((x - progress.x) / progress.w).clamp(0.0, 1.0);
@@ -1710,12 +2246,6 @@ unsafe extern "system" fn notch_wndproc(
                             }
                             if let Some(brightness) = &app.brightness {
                                 app.brightness_level = brightness.level();
-                            }
-                            if app.focus_running {
-                                app.focus_remaining = (app.focus_remaining - 1.0).max(0.0);
-                                if app.focus_remaining <= 0.0 {
-                                    app.focus_running = false;
-                                }
                             }
                             let (battery, charging) = battery_state();
                             app.battery = battery;
@@ -1785,8 +2315,50 @@ unsafe extern "system" fn notch_wndproc(
                                 app.battery_warned = false;
                             }
                         }
+                        // To-do, charger and network announcements.
+                        let now = GetLocalTime();
+                        let tasks = app.tasks.tasks.clone();
+                        let events = app.companion.tick(
+                            &now,
+                            &tasks,
+                            level,
+                            charging,
+                        );
+                        app.handle_events(events);
                         if dirty {
                             app.draw();
+                        }
+                    }
+                    TIMER_COMPANION => {
+                        app.companion_tick = app.companion_tick.wrapping_add(1);
+                        let mut dirty = app.focus_tick();
+                        if let Some(event) = app.companion.keyboard() {
+                            app.handle_events(vec![event]);
+                        }
+                        let media_now = media::snapshot();
+                        let busy = app.state.phase == Phase::Expanded
+                            || app.overlay.is_some()
+                            || media_now.playing
+                            || !app.activities.items.is_empty()
+                            || app.focus_running;
+                        dirty |= app
+                            .companion
+                            .update_eyes(app.settings.mascot && !app.settings.minimal, busy, app.companion_tick);
+                        if dirty {
+                            app.draw();
+                        }
+                    }
+                    TIMER_LEAVE_CHECK => {
+                        let _ = KillTimer(Some(hwnd), TIMER_LEAVE_CHECK);
+                        let mut pt = POINT::default();
+                        let _ = GetCursorPos(&mut pt);
+                        let _ = ScreenToClient(hwnd, &mut pt);
+                        if app.layout != Layout::Hub
+                            && !app.editing
+                            && app.state.phase == Phase::Expanded
+                            && !app.hit_with_margin(pt.x as f32 / app.scale, pt.y as f32 / app.scale)
+                        {
+                            app.collapse();
                         }
                     }
                     TIMER_WATER => {
@@ -1933,6 +2505,8 @@ unsafe extern "system" fn menu_wndproc(
                             .map(|app| app.settings.hide_on_fullscreen)
                             .unwrap_or(true),
                         layout: app.as_ref().map(|app| app.layout).unwrap_or_default(),
+                        mascot: app.as_ref().is_some_and(|app| app.settings.mascot),
+                        minimal: app.as_ref().is_some_and(|app| app.settings.minimal),
                     }
                 };
                 let _ = tray::show_menu(hwnd, &menu_state);
@@ -2025,6 +2599,24 @@ unsafe extern "system" fn menu_wndproc(
                         NOTCH_HWND.load(Ordering::Relaxed) as *mut core::ffi::c_void
                     )) {
                         app.set_opacity(1.0);
+                    }
+                }
+                tray::CMD_ASK => ask::toggle(),
+                tray::CMD_OCR => {
+                    let notch = HWND(NOTCH_HWND.load(Ordering::Relaxed) as *mut core::ffi::c_void);
+                    ocr::start(notch);
+                }
+                tray::CMD_MASCOT | tray::CMD_MINIMAL => {
+                    if let Some(app) = app(HWND(
+                        NOTCH_HWND.load(Ordering::Relaxed) as *mut core::ffi::c_void
+                    )) {
+                        let s = &mut app.settings;
+                        match wparam.0 & 0xFFFF {
+                            tray::CMD_MASCOT => s.mascot = !s.mascot,
+                            _ => s.minimal = !s.minimal,
+                        }
+                        app.settings.save();
+                        app.draw();
                     }
                 }
                 tray::CMD_FULLSCREEN => {
@@ -2139,6 +2731,64 @@ fn open_uri(uri: PCWSTR) {
     }
 }
 
+/// Open Windows search (the Start search panel), which finds any installed
+/// app. Goes through the shell's Search folder, so it works without focus.
+fn open_windows_search() {
+    unsafe {
+        ShellExecuteW(
+            None,
+            w!("open"),
+            w!("explorer.exe"),
+            w!("shell:::{2559a1f8-21d7-11d4-bdaf-00c04f60b9f0}"),
+            None,
+            SW_SHOWNORMAL,
+        );
+    }
+}
+
+/// Open a PowerShell window that explains how to add AI provider keys,
+/// pointing at this exe so the commands work as typed.
+fn open_ai_setup() {
+    let exe = std::env::current_exe()
+        .map(|p| p.to_string_lossy().replace('\'', "''"))
+        .unwrap_or_else(|_| "notch.exe".into());
+    // Written to a file so no quoting has to survive the command line.
+    let script = format!(
+        "$Host.UI.RawUI.WindowTitle = 'NOTCH AI setup'\r\n\
+         $n = '{exe}'\r\n\
+         Write-Host 'NOTCH AI Cockpit setup' -ForegroundColor Magenta\r\n\
+         Write-Host 'Admin keys are stored in Windows Credential Manager, never in settings.json.'\r\n\
+         Write-Host ''\r\n\
+         Write-Host \"  & '$n' key set claude sk-ant-admin01-...\"\r\n\
+         Write-Host \"  & '$n' key set openai sk-admin-...\"\r\n\
+         Write-Host \"  & '$n' key set deepseek sk-...\"\r\n\
+         Write-Host \"  & '$n' ai budget 200\"\r\n\
+         Write-Host \"  & '$n' ai refresh\"\r\n\
+         Write-Host ''\r\n"
+    );
+    let path = std::env::temp_dir().join("notch-ai-setup.ps1");
+    if std::fs::write(&path, script).is_err() {
+        return;
+    }
+    let args: Vec<u16> = format!(
+        "-NoExit -NoProfile -ExecutionPolicy Bypass -File \"{}\"",
+        path.display()
+    )
+    .encode_utf16()
+    .chain(std::iter::once(0))
+    .collect();
+    unsafe {
+        ShellExecuteW(
+            None,
+            w!("open"),
+            w!("powershell.exe"),
+            PCWSTR(args.as_ptr()),
+            None,
+            SW_SHOWNORMAL,
+        );
+    }
+}
+
 fn weekday(day: u16) -> &'static str {
     match day {
         0 => "Sun",
@@ -2190,6 +2840,8 @@ fn run() -> Result<()> {
     unsafe {
         let _ = SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
         let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
+        // OLE (on top of COM) for dragging shelf files out.
+        let _ = windows::Win32::System::Ole::OleInitialize(None);
 
         let _guard = CreateMutexW(None, true, w!("Local\\NotchSingleInstance"))?;
         if windows::Win32::Foundation::GetLastError()
@@ -2333,7 +2985,15 @@ fn send_activity(request: &activity::Request) -> i32 {
 }
 
 fn main() {
+    // Release builds have no console, so a panic would vanish without a trace.
+    std::panic::set_hook(Box::new(|info| {
+        let bt = std::backtrace::Backtrace::force_capture();
+        log(&format!("PANIC: {info}\n{bt}"));
+    }));
     let args: Vec<String> = std::env::args().skip(1).collect();
+    if let Some(code) = ask::cli(&args) {
+        std::process::exit(code);
+    }
     if let Some(code) = ai::cli(&args) {
         std::process::exit(code);
     }

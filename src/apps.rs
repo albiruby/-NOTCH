@@ -83,6 +83,105 @@ fn scan(dir: &Path, depth: u32, out: &mut Vec<AppEntry>) {
     }
 }
 
+/// The icon source of a .lnk: its explicit icon file if set, else the target
+/// path. None for other files or shortcuts without a file target (e.g. Store
+/// apps), which fall back to the shell icon.
+fn link_target(path: &str) -> Option<String> {
+    use windows::core::{Interface, PCWSTR};
+    use windows::Win32::System::Com::{CoCreateInstance, IPersistFile, CLSCTX_INPROC_SERVER, STGM_READ};
+    use windows::Win32::UI::Shell::{IShellLinkW, ShellLink};
+    if !path.to_ascii_lowercase().ends_with(".lnk") {
+        return None;
+    }
+    let wide: Vec<u16> = path.encode_utf16().chain(std::iter::once(0)).collect();
+    unsafe {
+        let link: IShellLinkW = CoCreateInstance(&ShellLink, None, CLSCTX_INPROC_SERVER).ok()?;
+        link.cast::<IPersistFile>()
+            .ok()?
+            .Load(PCWSTR(wide.as_ptr()), STGM_READ)
+            .ok()?;
+        let mut buf = [0u16; 520];
+        let mut index = 0i32;
+        let icon = link
+            .GetIconLocation(&mut buf, &mut index)
+            .ok()
+            .map(|_| String::from_utf16_lossy(&buf[..buf.iter().position(|&c| c == 0).unwrap_or(0)]))
+            .filter(|s| !s.is_empty() && !s.to_ascii_lowercase().ends_with(".lnk"));
+        // An explicit icon file only helps when it is the main icon; with an
+        // index we would pick the wrong one, so prefer the target then.
+        if let Some(icon) = icon.filter(|_| index == 0) {
+            let expanded = std::env::var("SystemRoot")
+                .map(|root| icon.replace("%SystemRoot%", &root).replace("%windir%", &root))
+                .unwrap_or(icon);
+            if std::path::Path::new(&expanded).exists() {
+                return Some(expanded);
+            }
+        }
+        let mut buf = [0u16; 520];
+        link.GetPath(&mut buf, std::ptr::null_mut(), 0).ok()?;
+        let target = String::from_utf16_lossy(&buf[..buf.iter().position(|&c| c == 0).unwrap_or(0)]);
+        (!target.is_empty() && std::path::Path::new(&target).exists()).then_some(target)
+    }
+}
+
+/// A `size`-px icon image from the shell (IShellItemImageFactory), as
+/// premultiplied BGRA. Skips results that are only an upscaled small icon.
+fn shell_image(path: &str, size: i32) -> Option<(u32, Vec<u8>)> {
+    use windows::core::PCWSTR;
+    use windows::Win32::Foundation::SIZE;
+    use windows::Win32::Graphics::Gdi::{
+        DeleteObject, GetDC, GetDIBits, GetObjectW, ReleaseDC, BITMAP, BITMAPINFO,
+        BITMAPINFOHEADER, BI_RGB, DIB_RGB_COLORS,
+    };
+    use windows::Win32::UI::Shell::{
+        IShellItemImageFactory, SHCreateItemFromParsingName, SIIGBF_BIGGERSIZEOK, SIIGBF_ICONONLY,
+    };
+    let wide: Vec<u16> = path.encode_utf16().chain(std::iter::once(0)).collect();
+    unsafe {
+        let factory: IShellItemImageFactory = SHCreateItemFromParsingName(
+            PCWSTR(wide.as_ptr()),
+            None::<&windows::Win32::System::Com::IBindCtx>,
+        )
+        .ok()?;
+        let hbmp = factory
+            .GetImage(SIZE { cx: size, cy: size }, SIIGBF_ICONONLY | SIIGBF_BIGGERSIZEOK)
+            .ok()?;
+        let mut bmp = BITMAP::default();
+        let got = GetObjectW(
+            hbmp.into(),
+            std::mem::size_of::<BITMAP>() as i32,
+            Some(&mut bmp as *mut BITMAP as *mut core::ffi::c_void),
+        );
+        let (w, h) = (bmp.bmWidth, bmp.bmHeight.abs());
+        if got == 0 || w <= 0 || w != h {
+            let _ = DeleteObject(hbmp.into());
+            return None;
+        }
+        let mut info = BITMAPINFO {
+            bmiHeader: BITMAPINFOHEADER {
+                biSize: std::mem::size_of::<BITMAPINFOHEADER>() as u32,
+                biWidth: w,
+                biHeight: -h,
+                biPlanes: 1,
+                biBitCount: 32,
+                biCompression: BI_RGB.0,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let mut pixels = vec![0u8; (w * h * 4) as usize];
+        let dc = GetDC(None);
+        let scans = GetDIBits(dc, hbmp, 0, h as u32, Some(pixels.as_mut_ptr() as *mut _), &mut info, DIB_RGB_COLORS);
+        ReleaseDC(None, dc);
+        let _ = DeleteObject(hbmp.into());
+        if scans == 0 || pixels.chunks_exact(4).all(|p| p[3] == 0) {
+            return None;
+        }
+        // The shell hands back premultiplied alpha already.
+        Some((w as u32, pixels))
+    }
+}
+
 /// Loads a shortcut's icon as premultiplied BGRA pixels (top-down).
 /// Returns (side, pixels) where the image is `side` x `side`. None if the
 /// icon can't be read. Used by the renderer to build a D2D bitmap once.
@@ -96,7 +195,67 @@ pub fn icon_bgra(path: &str) -> Option<(u32, Vec<u8>)> {
     use windows::Win32::UI::WindowsAndMessaging::{DestroyIcon, GetIconInfo, HICON, ICONINFO};
 
     let wide: Vec<u16> = path.encode_utf16().chain(std::iter::once(0)).collect();
+    // Sharp icons first: ask the shell for a 128 px image of the shortcut's
+    // target (no shortcut arrow), then of the shortcut itself.
+    let target = link_target(path);
+    for source in target.iter().map(String::as_str).chain(std::iter::once(path)) {
+        if let Some(found) = shell_image(source, 128) {
+            return Some(found);
+        }
+    }
     unsafe {
+        // SHGetFileInfo on a .lnk paints the shortcut arrow over the icon.
+        // Resolve the shortcut to its target and ask for that icon instead.
+        if let Some(target) = link_target(path) {
+            let twide: Vec<u16> = target.encode_utf16().chain(std::iter::once(0)).collect();
+            let mut info = SHFILEINFOW::default();
+            let ok = SHGetFileInfoW(
+                PCWSTR(twide.as_ptr()),
+                Default::default(),
+                Some(&mut info),
+                std::mem::size_of::<SHFILEINFOW>() as u32,
+                SHGFI_ICON | SHGFI_LARGEICON,
+            );
+            if ok != 0 && !info.hIcon.is_invalid() {
+                let result = icon_to_bgra(info.hIcon);
+                let _ = DestroyIcon(info.hIcon);
+                if result.is_some() {
+                    return result;
+                }
+            }
+        }
+        {
+            use windows::Win32::UI::Shell::{SHDefExtractIconW, SHGFI_ICONLOCATION};
+            let mut loc = SHFILEINFOW::default();
+            let ok = SHGetFileInfoW(
+                PCWSTR(wide.as_ptr()),
+                Default::default(),
+                Some(&mut loc),
+                std::mem::size_of::<SHFILEINFOW>() as u32,
+                SHGFI_ICONLOCATION,
+            );
+            if ok != 0 && loc.szDisplayName[0] != 0 {
+                let mut large = HICON::default();
+                // 48px, packed in the low word as SHDefExtractIcon expects.
+                if SHDefExtractIconW(
+                    PCWSTR(loc.szDisplayName.as_ptr()),
+                    loc.iIcon,
+                    0,
+                    Some(&mut large),
+                    None,
+                    48,
+                )
+                .is_ok()
+                    && !large.is_invalid()
+                {
+                    let result = icon_to_bgra(large);
+                    let _ = DestroyIcon(large);
+                    if result.is_some() {
+                        return result;
+                    }
+                }
+            }
+        }
         let mut info = SHFILEINFOW::default();
         let ok = SHGetFileInfoW(
             PCWSTR(wide.as_ptr()),

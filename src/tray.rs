@@ -35,6 +35,10 @@ pub const CMD_MODE_ISLAND_PRO: usize = 17;
 pub const CMD_THEME_VIOLET: usize = 18;
 pub const CMD_THEME_MINT: usize = 19;
 pub const CMD_THEME_CORAL: usize = 20;
+pub const CMD_MASCOT: usize = 23;
+pub const CMD_ASK: usize = 25;
+pub const CMD_OCR: usize = 26;
+pub const CMD_MINIMAL: usize = 24;
 
 pub struct MenuState {
     pub mode: crate::state::SurfaceMode,
@@ -43,6 +47,8 @@ pub struct MenuState {
     pub opacity: f32,
     pub hide_on_fullscreen: bool,
     pub layout: crate::state::Layout,
+    pub mascot: bool,
+    pub minimal: bool,
 }
 
 pub struct Tray {
@@ -60,7 +66,12 @@ impl Tray {
                 uCallbackMessage: WM_TRAY,
                 ..Default::default()
             };
-            data.hIcon = LoadIconW(None, IDI_APPLICATION)?;
+            // Resource 1 is the NOTCH logo embedded by build.rs.
+            let module = windows::Win32::System::LibraryLoader::GetModuleHandleW(None)?;
+            data.hIcon = match LoadIconW(Some(module.into()), windows::core::PCWSTR(1 as _)) {
+                Ok(icon) => icon,
+                Err(_) => LoadIconW(None, IDI_APPLICATION)?,
+            };
             set_text(&mut data.szTip, "NOTCH");
             if !Shell_NotifyIconW(NIM_ADD, &data).as_bool() {
                 return Err(windows::core::Error::from_thread());
@@ -95,6 +106,9 @@ pub fn show_menu(owner: HWND, state: &MenuState) -> Result<()> {
     unsafe {
         let menu = CreatePopupMenu()?;
         AppendMenuW(menu, MF_STRING, CMD_TOGGLE, w!("Show / hide notch"))?;
+        AppendMenuW(menu, MF_STRING, CMD_ASK, w!("Ask NOTCH…"))?;
+        AppendMenuW(menu, MF_STRING, CMD_OCR, w!("Copy text from screen (OCR)"))?;
+        AppendMenuW(menu, MF_SEPARATOR, 0, w!(""))?;
         use crate::state::SurfaceMode;
         let check = |mode: SurfaceMode| {
             if state.mode == mode {
@@ -216,6 +230,11 @@ pub fn show_menu(owner: HWND, state: &MenuState) -> Result<()> {
             CMD_FULLSCREEN,
             w!("Hide on fullscreen"),
         )?;
+        let flag = |on: bool| if on { MF_STRING | MF_CHECKED } else { MF_STRING };
+        AppendMenuW(menu, MF_SEPARATOR, 0, w!(""))?;
+        AppendMenuW(menu, flag(state.mascot), CMD_MASCOT, w!("Idle mascot"))?;
+        AppendMenuW(menu, flag(state.minimal), CMD_MINIMAL, w!("Minimal notch (thin line)"))?;
+        AppendMenuW(menu, MF_SEPARATOR, 0, w!(""))?;
         AppendMenuW(menu, MF_STRING, CMD_SETTINGS, w!("Open settings folder"))?;
         AppendMenuW(menu, MF_SEPARATOR, 0, w!(""))?;
         AppendMenuW(menu, MF_STRING, CMD_QUIT, w!("Quit NOTCH"))?;

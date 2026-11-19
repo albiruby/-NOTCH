@@ -86,6 +86,19 @@ pub struct DrawParams {
     pub activities: Vec<crate::activity::Activity>,
     pub ai: crate::ai::Snapshot,
     pub weather: crate::weather::Weather,
+    /// Text for `OverlayKind::Message`.
+    pub overlay_text: String,
+    pub week: Vec<(char, u32, bool)>,
+    /// 1..=4 within the Pomodoro set.
+    pub focus_round: u8,
+    /// 0 = focus, 1 = short break, 2 = long break.
+    pub focus_break: u8,
+    /// Length of the current focus/break phase in seconds.
+    pub focus_total: f32,
+    pub eyes: crate::companion::Eyes,
+    /// Hover scale per app icon: dock items first, then launcher rows.
+    pub icon_pop: Vec<f32>,
+    pub minimal: bool,
 }
 
 pub struct Renderer {
@@ -127,6 +140,8 @@ pub struct Renderer {
     art_id: u64,
     art_bitmap: Option<ID2D1Bitmap1>,
     icon_cache: std::cell::RefCell<std::collections::HashMap<String, Option<ID2D1Bitmap1>>>,
+    dwrite: IDWriteFactory,
+    logo: Option<ID2D1Bitmap1>,
 }
 
 impl Renderer {
@@ -169,6 +184,8 @@ impl Renderer {
             dcomp.Commit()?;
 
             let dwrite: IDWriteFactory = DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED)?;
+            crate::fonts::init(&dwrite);
+            let logo = decode_art(&ctx, LOGO_PNG).ok();
 
             Ok(Self {
                 _d3d: d3d,
@@ -184,7 +201,7 @@ impl Renderer {
                 height,
                 fmt_clock: format(
                     &dwrite,
-                    theme::typography::FONT_UI,
+                    theme::typography::FONT_DISPLAY,
                     theme::typography::BODY_SM,
                     DWRITE_FONT_WEIGHT_SEMI_BOLD,
                     DWRITE_TEXT_ALIGNMENT_CENTER,
@@ -192,7 +209,7 @@ impl Renderer {
                 )?,
                 fmt_big: format(
                     &dwrite,
-                    theme::typography::FONT_UI,
+                    theme::typography::FONT_SERIF,
                     theme::typography::DISPLAY,
                     DWRITE_FONT_WEIGHT_SEMI_BOLD,
                     DWRITE_TEXT_ALIGNMENT_LEADING,
@@ -216,7 +233,7 @@ impl Renderer {
                 )?,
                 fmt_wordmark: format(
                     &dwrite,
-                    theme::typography::FONT_UI,
+                    theme::typography::FONT_DISPLAY,
                     theme::typography::MICRO,
                     DWRITE_FONT_WEIGHT_SEMI_BOLD,
                     DWRITE_TEXT_ALIGNMENT_TRAILING,
@@ -224,7 +241,7 @@ impl Renderer {
                 )?,
                 fmt_media_title: format(
                     &dwrite,
-                    theme::typography::FONT_UI,
+                    theme::typography::FONT_DISPLAY,
                     13.0,
                     DWRITE_FONT_WEIGHT_SEMI_BOLD,
                     DWRITE_TEXT_ALIGNMENT_TRAILING,
@@ -232,8 +249,8 @@ impl Renderer {
                 )?,
                 fmt_media_artist: format(
                     &dwrite,
-                    theme::typography::FONT_UI,
-                    theme::typography::CAPTION,
+                    theme::typography::FONT_SERIF,
+                    13.0,
                     DWRITE_FONT_WEIGHT_NORMAL,
                     DWRITE_TEXT_ALIGNMENT_TRAILING,
                     DWRITE_PARAGRAPH_ALIGNMENT_NEAR,
@@ -272,7 +289,7 @@ impl Renderer {
                 )?,
                 fmt_focus: format(
                     &dwrite,
-                    theme::typography::FONT_UI,
+                    theme::typography::FONT_SERIF,
                     46.0,
                     DWRITE_FONT_WEIGHT_SEMI_BOLD,
                     DWRITE_TEXT_ALIGNMENT_CENTER,
@@ -296,7 +313,7 @@ impl Renderer {
                 )?,
                 fmt_wide_time: format(
                     &dwrite,
-                    theme::typography::FONT_UI,
+                    theme::typography::FONT_SERIF,
                     22.0,
                     DWRITE_FONT_WEIGHT_SEMI_BOLD,
                     DWRITE_TEXT_ALIGNMENT_TRAILING,
@@ -304,7 +321,7 @@ impl Renderer {
                 )?,
                 fmt_wide_title: format(
                     &dwrite,
-                    theme::typography::FONT_UI,
+                    theme::typography::FONT_DISPLAY,
                     14.0,
                     DWRITE_FONT_WEIGHT_SEMI_BOLD,
                     DWRITE_TEXT_ALIGNMENT_LEADING,
@@ -336,7 +353,7 @@ impl Renderer {
                 )?,
                 fmt_logo: format(
                     &dwrite,
-                    theme::typography::FONT_UI,
+                    theme::typography::FONT_DISPLAY,
                     13.0,
                     DWRITE_FONT_WEIGHT_BOLD,
                     DWRITE_TEXT_ALIGNMENT_CENTER,
@@ -344,7 +361,7 @@ impl Renderer {
                 )?,
                 fmt_pill_time: format(
                     &dwrite,
-                    theme::typography::FONT_UI,
+                    theme::typography::FONT_DISPLAY,
                     theme::typography::LABEL,
                     DWRITE_FONT_WEIGHT_SEMI_BOLD,
                     DWRITE_TEXT_ALIGNMENT_TRAILING,
@@ -352,7 +369,7 @@ impl Renderer {
                 )?,
                 fmt_pill_title: format(
                     &dwrite,
-                    theme::typography::FONT_UI,
+                    theme::typography::FONT_DISPLAY,
                     theme::typography::CAPTION,
                     DWRITE_FONT_WEIGHT_SEMI_BOLD,
                     DWRITE_TEXT_ALIGNMENT_LEADING,
@@ -360,7 +377,7 @@ impl Renderer {
                 )?,
                 fmt_card_title: format(
                     &dwrite,
-                    theme::typography::FONT_UI,
+                    theme::typography::FONT_DISPLAY,
                     14.0,
                     DWRITE_FONT_WEIGHT_SEMI_BOLD,
                     DWRITE_TEXT_ALIGNMENT_LEADING,
@@ -368,7 +385,7 @@ impl Renderer {
                 )?,
                 fmt_card_title_center: format(
                     &dwrite,
-                    theme::typography::FONT_UI,
+                    theme::typography::FONT_DISPLAY,
                     16.0,
                     DWRITE_FONT_WEIGHT_BOLD,
                     DWRITE_TEXT_ALIGNMENT_CENTER,
@@ -377,7 +394,44 @@ impl Renderer {
                 art_id: 0,
                 art_bitmap: None,
                 icon_cache: std::cell::RefCell::new(std::collections::HashMap::new()),
+                logo,
+                dwrite,
             })
+            .map(|r: Self| {
+                // Titles in the pill and cards stay on one line and end in
+                // an ellipsis instead of wrapping onto a second row.
+                for fmt in [
+                    &r.fmt_pill_title,
+                    &r.fmt_media_title,
+                    &r.fmt_media_artist,
+                    &r.fmt_wide_title,
+                    &r.fmt_wide_sub,
+                    &r.fmt_card_title,
+                ] {
+                    single_line(&r.dwrite, fmt);
+                }
+                r
+            })
+        }
+    }
+
+    /// Width in DIPs the pill title needs to show `text` on one line.
+    pub fn pill_title_width(&self, text: &str, scale: f32) -> f32 {
+        let wide: Vec<u16> = text.encode_utf16().collect();
+        unsafe {
+            let layout = match self
+                .dwrite
+                .CreateTextLayout(&wide, &self.fmt_pill_title, 4096.0, 64.0)
+            {
+                Ok(layout) => layout,
+                Err(_) => return 0.0,
+            };
+            let mut m = Default::default();
+            if layout.GetMetrics(&mut m).is_err() {
+                return 0.0;
+            }
+            let m: windows::Win32::Graphics::DirectWrite::DWRITE_TEXT_METRICS = m;
+            m.widthIncludingTrailingWhitespace / scale.max(0.5)
         }
     }
 
@@ -461,6 +515,7 @@ impl Renderer {
                             format!("DRINK WATER  {done}/{}", overlay.goal)
                         }
                         crate::state::OverlayKind::Copied => "COPIED".to_string(),
+                        crate::state::OverlayKind::Message => p.overlay_text.clone(),
                         crate::state::OverlayKind::Privacy => p.privacy.label(),
                         crate::state::OverlayKind::Battery => {
                             if overlay.on {
@@ -528,14 +583,47 @@ impl Renderer {
                             );
                         }
                     }
+                } else if p.minimal {
+                    // Minimal notch: a thin line with nothing inside.
+                } else if p.eyes != crate::companion::Eyes::Hidden {
+                    // Idle mascot: the clock rests and a pair of eyes looks out.
+                    use crate::companion::Eyes;
+                    let cy = (visible_top + shape.bottom()) * 0.5;
+                    let cx = shape.x + shape.w * 0.5;
+                    let eye = solid(ctx, &theme::rgb(0xFFFFFF, 0.92 * compact_alpha))?;
+                    let (w, h) = match p.eyes {
+                        Eyes::Open => (7.0, 12.0),
+                        _ => (8.0, 2.4),
+                    };
+                    for dx in [-11.0f32, 11.0] {
+                        ctx.FillRoundedRectangle(
+                            &D2D1_ROUNDED_RECT {
+                                rect: scaled_rect_raw(cx + dx - w * 0.5, cy - h * 0.5, w, h, s),
+                                radiusX: w * 0.5 * s,
+                                radiusY: h.min(w) * 0.5 * s,
+                            },
+                            &eye,
+                        );
+                    }
+                    if p.eyes == Eyes::Dozing {
+                        let z = solid(ctx, &theme::rgb(theme::accent::text2(), 0.8 * compact_alpha))?;
+                        draw_text(
+                            ctx,
+                            "z",
+                            &self.fmt_small,
+                            scaled_rect(cx + 22.0, visible_top, 20.0, shape.bottom() - visible_top - 6.0, s),
+                            &z,
+                        );
+                    }
                 } else if p.show_clock {
                     // Brand mark left, now-playing in the middle, clock right,
                     // mirroring the reference top pill.
                     let center_y = (visible_top + shape.bottom()) * 0.5;
                     let mark_r = ((shape.bottom() - visible_top) * 0.5 - 6.0).clamp(7.0, 11.0);
                     let mark_cx = shape.x + 10.0 + mark_r;
-                    draw_logo(
+                    draw_logo_mark(
                         ctx,
+                        self.logo.as_ref(),
                         &self.fmt_logo,
                         mark_cx,
                         center_y,
@@ -567,7 +655,7 @@ impl Renderer {
                         &time_brush,
                     );
 
-                    let mut mid_left = mark_cx + mark_r + 8.0;
+                    let mut mid_left = mark_cx + mark_r + 14.0;
                     let mid_right = shape.right() - 14.0 - lens_pad - time_w - 6.0;
                     if lens_pad > 0.0 {
                         draw_lens(ctx, shape.right() - 17.0, center_y, s, compact_alpha)?;
@@ -619,7 +707,7 @@ impl Renderer {
                                 5.0 * s,
                                 compact_alpha,
                             )?;
-                            mid_left += art_size + 6.0;
+                            mid_left += art_size + 10.0;
                         }
                         let title = solid(ctx, &primary)?;
                         title.SetOpacity(compact_alpha);
@@ -1665,8 +1753,9 @@ impl Renderer {
                         Glass::Tile,
                         s,
                     )?;
-                    draw_logo(
+                    draw_logo_mark(
                         ctx,
+                        self.logo.as_ref(),
                         &self.fmt_logo,
                         x + 46.0,
                         y + 48.0,
@@ -1889,7 +1978,7 @@ impl Renderer {
                 let cy = (top + shape.bottom()) * 0.5;
                 let x = shape.x;
                 let w = shape.w;
-                draw_logo(ctx, &self.fmt_logo, x + 30.0, cy, 13.0, s, panel_alpha)?;
+                draw_logo_mark(ctx, self.logo.as_ref(), &self.fmt_logo, x + 30.0, cy, 13.0, s, panel_alpha)?;
                 let mut left = x + 54.0;
                 if let Some(art) = &self.art_bitmap {
                     draw_rounded_art(
@@ -2062,7 +2151,7 @@ impl Renderer {
                     &bitmap,
                     Some(&rect),
                     alpha,
-                    D2D1_INTERPOLATION_MODE_LINEAR,
+                    windows::Win32::Graphics::Direct2D::D2D1_INTERPOLATION_MODE_HIGH_QUALITY_CUBIC,
                     None,
                     None,
                 );
@@ -2446,7 +2535,7 @@ impl Renderer {
         let dot = solid(ctx, &theme::rgb(theme::color::SUCCESS, 1.0))?;
         ctx.FillEllipse(&circle((x + 4.0) * s, (y + 8.0) * s, 3.0 * s), &dot);
         let text = solid(ctx, &theme::rgb(theme::accent::text2(), 1.0))?;
-        let label = format!("Active now  ·  {}", ai.active_sessions.join("  ·  "));
+        let label = format!("Active now  Â·  {}", ai.active_sessions.join("  Â·  "));
         draw_text(
             ctx,
             &label,
@@ -2454,6 +2543,77 @@ impl Renderer {
             scaled_rect(x + 14.0, y, w - 14.0, 16.0, s),
             &text,
         );
+        Ok(())
+    }
+
+    /// Today card: this week's days, up to three tasks, and water glasses.
+    fn draw_today_card(&self, p: &DrawParams, card: crate::state::Rect, s: f32) -> Result<()> {
+        use crate::state::hub;
+        unsafe {
+            let ctx = &self.ctx;
+            let primary = solid(ctx, &theme::rgb(theme::accent::text1(), 1.0))?;
+            let muted = solid(ctx, &theme::rgb(theme::accent::muted(), 1.0))?;
+            let accent = solid(ctx, &theme::rgb(theme::accent::c500(), 1.0))?;
+            let (x, y) = (card.x, card.y);
+            draw_text(ctx, "Today", &self.fmt_card_title, scaled_rect(x + 20.0, y + 12.0, 80.0, 22.0, s), &primary);
+            draw_text(ctx, &p.date, &self.fmt_small, scaled_rect(x + 78.0, y + 12.0, 160.0, 22.0, s), &muted);
+
+            for (i, (letter, day, today)) in p.week.iter().enumerate() {
+                let cx = x + 20.0 + i as f32 * 31.0;
+                draw_text(ctx, &letter.to_string(), &self.fmt_tab, scaled_rect(cx, y + 40.0, 28.0, 14.0, s), &muted);
+                if *today {
+                    ctx.FillEllipse(&circle((cx + 14.0) * s, (y + 66.0) * s, 11.0 * s), &accent);
+                }
+                draw_text(
+                    ctx,
+                    &day.to_string(),
+                    &self.fmt_tab,
+                    scaled_rect(cx, y + 58.0, 28.0, 16.0, s),
+                    &primary,
+                );
+            }
+
+            let open: Vec<&crate::tasks::Task> = p.tasks.iter().take(hub::TODAY_TASKS).collect();
+            if open.is_empty() {
+                draw_text(
+                    ctx,
+                    "No tasks. Add one in the Panel layout (tip: \"14:30 Call Dina\" sets a reminder).",
+                    &self.fmt_small,
+                    scaled_rect(x + 250.0, y + 40.0, card.w - 266.0, 44.0, s),
+                    &muted,
+                );
+            }
+            for (i, task) in open.iter().enumerate() {
+                let row = hub::today_task(i);
+                let mark = if task.done { "\u{E73E}" } else { "\u{E739}" };
+                draw_text(ctx, mark, &self.fmt_icon_sm, scaled_rect(row.x, row.y, 16.0, row.h, s), &accent);
+                draw_text(
+                    ctx,
+                    &task.text,
+                    &self.fmt_small,
+                    scaled_rect(row.x + 22.0, row.y, row.w - 22.0, row.h, s),
+                    if task.done { &muted } else { &primary },
+                );
+            }
+
+            let goal = p.water_goal.clamp(1, 8) as usize;
+            for i in 0..goal {
+                let dot = hub::water_dot(i);
+                let (cx, cy) = (dot.x + dot.w * 0.5, dot.y + dot.h * 0.5);
+                if (i as u32) < p.water {
+                    ctx.FillEllipse(&circle(cx * s, cy * s, 8.0 * s), &accent);
+                } else {
+                    ctx.DrawEllipse(&circle(cx * s, cy * s, 8.0 * s), &muted, 1.2 * s, None);
+                }
+            }
+            draw_text(
+                ctx,
+                &format!("Water {}/{}", p.water, p.water_goal),
+                &self.fmt_small,
+                scaled_rect(x + 20.0 + goal as f32 * 26.0 + 8.0, y + 92.0, 120.0, 22.0, s),
+                &muted,
+            );
+        }
         Ok(())
     }
 
@@ -2508,9 +2668,9 @@ impl Renderer {
                     &muted,
                 );
                 for (i, line) in [
-                    "notch key set claude sk-ant-admin…",
-                    "notch key set openai sk-admin-…",
-                    "notch key set deepseek sk-…",
+                    "notch key set claude sk-ant-adminâ€¦",
+                    "notch key set openai sk-admin-â€¦",
+                    "notch key set deepseek sk-â€¦",
                     "notch ai budget 200",
                 ]
                 .iter()
@@ -2557,13 +2717,13 @@ impl Renderer {
                     &muted,
                 );
                 let value = if !stat.configured {
-                    "—".to_string()
+                    "â€”".to_string()
                 } else if let Some(cost) = stat.cost {
                     format!("${cost:.2}")
                 } else if let Some(balance) = &stat.balance {
                     balance.clone()
                 } else {
-                    "…".to_string()
+                    "â€¦".to_string()
                 };
                 draw_text(
                     ctx,
@@ -2620,7 +2780,7 @@ impl Renderer {
                     1.0,
                 )?;
                 let label = format!(
-                    "{:.0}% of ${:.0} budget  ·  ${total:.2}",
+                    "{:.0}% of ${:.0} budget  Â·  ${total:.2}",
                     ratio * 100.0,
                     ai.budget
                 );
@@ -2759,7 +2919,13 @@ impl Renderer {
                     .next()
                     .map(|c| c.to_uppercase().collect())
                     .unwrap_or_default();
-                let tile = scaled_rect(row.x, row.y + 6.0, 40.0, 40.0, s);
+                let k = p
+                    .icon_pop
+                    .get(crate::state::hub::DOCK_MAX + index)
+                    .copied()
+                    .unwrap_or(1.0);
+                let side = 40.0 * k;
+                let tile = scaled_rect(row.x + 20.0 - side * 0.5, row.y + 26.0 - side * 0.5, side, side, s);
                 if !self.draw_app_icon(p.app_paths.get(index).map(String::as_str), tile, 1.0) {
                     draw_glass(ctx, tile, 10.0 * s, 1.0, Glass::Tile, s)?;
                     draw_text(ctx, &initial, &self.fmt_card_title_center, tile, &accent);
@@ -2840,7 +3006,7 @@ impl Renderer {
                 draw_rounded_art(ctx, art, art_rect, 14.0 * s, 1.0)?;
             } else {
                 draw_glass(ctx, art_rect, 14.0 * s, 1.0, Glass::Tile, s)?;
-                draw_logo(ctx, &self.fmt_logo, m.x + 64.0, m.y + 64.0, 16.0, s, 1.0)?;
+                draw_logo_mark(ctx, self.logo.as_ref(), &self.fmt_logo, m.x + 64.0, m.y + 64.0, 16.0, s, 1.0)?;
             }
             let (title, artist) = if p.media.available {
                 (p.media.title.as_str(), p.media.artist.as_str())
@@ -3041,13 +3207,32 @@ impl Renderer {
                 scaled_rect(f.x + 20.0, f.y + 12.0, 120.0, 22.0, s),
                 &primary,
             );
+            let phase = match p.focus_break {
+                1 => "Short break".to_string(),
+                2 => "Long break".to_string(),
+                _ => format!("{} of 4", p.focus_round.clamp(1, 4)),
+            };
             draw_text(
                 ctx,
-                if p.focus_running { "Running" } else { "Paused" },
+                &format!("{phase} Â· {}", if p.focus_running { "running" } else { "paused" }),
                 &self.fmt_small,
-                scaled_rect(f.x + 80.0, f.y + 12.0, 120.0, 22.0, s),
+                scaled_rect(f.x + 80.0, f.y + 12.0, 160.0, 22.0, s),
                 if p.focus_running { &accent } else { &muted },
             );
+            // Round dots: filled for finished rounds, ring for the current.
+            for i in 0..4u8 {
+                let cx = f.x + f.w - 74.0 + i as f32 * 16.0;
+                let cy = f.y + 23.0;
+                let round = i + 1;
+                let done = round < p.focus_round || (round == p.focus_round && p.focus_break > 0);
+                if done {
+                    ctx.FillEllipse(&circle(cx * s, cy * s, 4.5 * s), &accent);
+                } else if round == p.focus_round {
+                    ctx.DrawEllipse(&circle(cx * s, cy * s, 4.5 * s), &accent, 1.5 * s, None);
+                } else {
+                    ctx.DrawEllipse(&circle(cx * s, cy * s, 4.5 * s), &muted, 1.0 * s, None);
+                }
+            }
             let remaining = p.focus_remaining.max(0.0) as u32;
             draw_text(
                 ctx,
@@ -3084,11 +3269,14 @@ impl Renderer {
                 f.x + 20.0,
                 f.y + 124.0,
                 f.w - 40.0,
-                1.0 - p.focus_remaining / 1500.0,
+                1.0 - p.focus_remaining / p.focus_total.max(1.0),
                 false,
                 s,
                 1.0,
             )?;
+
+            // Today: week, tasks, water.
+            self.draw_today_card(p, hub::today(), s)?;
 
             // AI Developer Cockpit.
             self.draw_ai_card(p, hub::ai(), s)?;
@@ -3152,7 +3340,17 @@ impl Renderer {
                         .next()
                         .map(|c| c.to_uppercase().collect())
                         .unwrap_or_default();
-                    let tile = scaled_rect(item.x, item.y, item.w, item.h, s);
+                    // Hover pop: grow from the centre and lift a little.
+                    let k = p.icon_pop.get(index).copied().unwrap_or(1.0);
+                    let (w, h) = (item.w * k, item.h * k);
+                    let lift = (k - 1.0) * 26.0;
+                    let tile = scaled_rect(
+                        item.x + (item.w - w) * 0.5,
+                        item.y + (item.h - h) * 0.5 - lift,
+                        w,
+                        h,
+                        s,
+                    );
                     if !self.draw_app_icon(p.app_paths.get(index).map(String::as_str), tile, 1.0) {
                         draw_glass(ctx, tile, 14.0 * s, 1.0, Glass::Tile, s)?;
                         draw_text(ctx, &initial, &self.fmt_card_title_center, tile, &accent);
@@ -3371,10 +3569,17 @@ fn format(
     paragraph: windows::Win32::Graphics::DirectWrite::DWRITE_PARAGRAPH_ALIGNMENT,
 ) -> Result<IDWriteTextFormat> {
     let wide: Vec<u16> = family.encode_utf16().chain(std::iter::once(0)).collect();
+    let collection = crate::fonts::collection_for(family);
+    // Instrument Serif ships one weight; don't let DirectWrite fake a bold.
+    let weight = if family == crate::fonts::SERIF {
+        windows::Win32::Graphics::DirectWrite::DWRITE_FONT_WEIGHT_NORMAL
+    } else {
+        weight
+    };
     unsafe {
         let fmt = factory.CreateTextFormat(
             windows::core::PCWSTR::from_raw(wide.as_ptr()),
-            None,
+            collection.as_ref(),
             weight,
             DWRITE_FONT_STYLE_NORMAL,
             DWRITE_FONT_STRETCH_NORMAL,
@@ -3432,7 +3637,70 @@ unsafe fn circle(cx: f32, cy: f32, r: f32) -> D2D1_ELLIPSE {
     }
 }
 
-/// NOTCH app mark: a glowing violet disc with a bold "N". Coordinates in DIPs.
+const LOGO_PNG: &[u8] = include_bytes!("../assets/logo-mark.png");
+
+fn single_line(factory: &IDWriteFactory, fmt: &IDWriteTextFormat) {
+    use windows::Win32::Graphics::DirectWrite::{
+        DWRITE_TRIMMING, DWRITE_TRIMMING_GRANULARITY_CHARACTER, DWRITE_WORD_WRAPPING_NO_WRAP,
+    };
+    unsafe {
+        let _ = fmt.SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
+        if let Ok(sign) = factory.CreateEllipsisTrimmingSign(fmt) {
+            let trimming = DWRITE_TRIMMING {
+                granularity: DWRITE_TRIMMING_GRANULARITY_CHARACTER,
+                delimiter: 0,
+                delimiterCount: 0,
+            };
+            let _ = fmt.SetTrimming(&trimming, &sign);
+        }
+    }
+}
+
+/// NOTCH app mark: the brand logo clipped to a disc, with a soft violet glow.
+/// Falls back to a drawn "N" if the embedded image failed to decode.
+unsafe fn draw_logo_mark(
+    ctx: &ID2D1DeviceContext,
+    logo: Option<&ID2D1Bitmap1>,
+    fmt: &IDWriteTextFormat,
+    cx: f32,
+    cy: f32,
+    r: f32,
+    s: f32,
+    alpha: f32,
+) -> Result<()> {
+    let Some(logo) = logo else {
+        return draw_logo(ctx, fmt, cx, cy, r, s, alpha);
+    };
+    let glow = solid(ctx, &theme::rgb(theme::color::VIOLET_600, 0.22 * alpha))?;
+    ctx.FillEllipse(&circle(cx * s, cy * s, (r + 2.5) * s), &glow);
+    let size = logo.GetPixelSize();
+    let px = (r * 2.0 * s) / size.width.max(1) as f32;
+    let brush = ctx.CreateBitmapBrush(
+        logo,
+        Some(&windows::Win32::Graphics::Direct2D::D2D1_BITMAP_BRUSH_PROPERTIES1 {
+            extendModeX: windows::Win32::Graphics::Direct2D::D2D1_EXTEND_MODE_CLAMP,
+            extendModeY: windows::Win32::Graphics::Direct2D::D2D1_EXTEND_MODE_CLAMP,
+            interpolationMode:
+                windows::Win32::Graphics::Direct2D::D2D1_INTERPOLATION_MODE_HIGH_QUALITY_CUBIC,
+        }),
+        None,
+    )?;
+    brush.SetOpacity(alpha);
+    brush.SetTransform(&windows_numerics::Matrix3x2 {
+        M11: px,
+        M12: 0.0,
+        M21: 0.0,
+        M22: px,
+        M31: (cx - r) * s,
+        M32: (cy - r) * s,
+    });
+    ctx.FillEllipse(&circle(cx * s, cy * s, r * s), &brush);
+    let rim = solid(ctx, &theme::rgb(theme::color::VIOLET_300, 0.35 * alpha))?;
+    ctx.DrawEllipse(&circle(cx * s, cy * s, r * s), &rim, 1.0, None);
+    Ok(())
+}
+
+/// Fallback mark: a glowing violet disc with a bold "N". Coordinates in DIPs.
 unsafe fn draw_logo(
     ctx: &ID2D1DeviceContext,
     fmt: &IDWriteTextFormat,
@@ -3672,6 +3940,13 @@ unsafe fn draw_glass(
             theme::rgb(theme::accent::base(), g.body_bottom * opacity),
         )
     };
+    if kind != Glass::Tile {
+        // There is no backdrop blur, so a dark base keeps the light text
+        // readable over bright windows; the tint and sheen sit on top.
+        // Floor at 0.9 so a low opacity setting cannot make text unreadable.
+        let base = solid(ctx, &theme::rgb(0x0B0912, (g.base * opacity).max(1.0)))?;
+        ctx.FillRoundedRectangle(&rr(rect, radius), &base);
+    }
     let body = linear(
         ctx,
         rect.left,

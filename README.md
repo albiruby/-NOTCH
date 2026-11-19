@@ -81,8 +81,29 @@ v1.13 — AI Developer Cockpit di Hub. v1.12: indikator privasi kamera/mikrofon 
 - Cuaca saat ini dari `wttr.in` (tanpa API key, lokasi deteksi via IP), diperbarui tiap 30 menit
 - Throughput jaringan download/upload di bawah jam
 
+**Peek kecil di pill**
+- Charger dicolok / dicabut, internet putus / kembali, bahasa keyboard berganti (mis. `KEYBOARD EN-US`)
+- Pengingat to-do: task berawalan jam (`14:30 Telepon Dina`) atau berakhiran `@14:30` muncul tepat waktunya
+- Pill melebar mengikuti panjang pesan
+
+**Maskot dan mode minimal** (tray)
+- **Idle mascot**: setelah 1 menit tanpa input dan tanpa musik, jam diganti sepasang mata yang berkedip; setelah 5 menit mata tertidur
+- **Minimal notch**: pill tertutup menjadi garis tipis; hover, overlay, dan peek tetap jalan
+
+**Ask, OCR, dan shelf**
+- **Ask** (Ctrl+Alt+Space; kalau dipakai aplikasi lain: Ctrl+Shift+Space, lalu Alt+Shift+Space; juga di tray → **Ask NOTCH…**): tanya apa saja, jawaban mengalir dari Google Gemini memakai key milik sendiri. Tab = Translate (deteksi bahasa otomatis). Baris berakhiran `=` dihitung lokal (`12*(3+4)=`) atau konversi kurs (`100usd to idr=`, kurs ECB via Frankfurter) tanpa key
+- Key Gemini: tempel key (diawali `AIza`) di kolom Ask, atau `notch key set gemini <key>`. Disimpan di Windows Credential Manager
+- **Smart OCR** (Ctrl+Alt+T, atau tray → **Copy text from screen**): layar dibekukan, tarik kotak di atas teks, teks dibaca OCR bawaan Windows (offline) dan disalin ke clipboard
+- **Shelf drag-out**: tarik file dari File Shelf ke Explorer, chat, atau email
+- Klik baris lirik di halaman Panel untuk loncat ke bagian itu
+- Peek saat perangkat audio default berganti (mis. `HEADPHONES  JETE-CE7`)
+
+**Tipografi**
+- Red Hat Display (judul, jam, angka), Instrument Serif (angka besar), Inter (isi). Diambil dari Google Fonts saat pertama jalan, di-cache di `%LOCALAPPDATA%\Notch\fonts`, dimuat privat untuk proses NOTCH (tidak di-install ke Windows). Offline: font sistem
+
 **Produktivitas**
-- Focus timer Pomodoro 25 menit, klik untuk start/pause, reset
+- Focus timer Pomodoro: 4 sesi 25 menit, istirahat 5 menit, istirahat panjang 15 menit setelah sesi ke-4; tetap berjalan saat Hub tertutup
+- Kartu Today di Hub: minggu ini, 3 task teratas (klik untuk centang), dan 8 gelas air (klik untuk mengisi)
 - Tasks dengan input keyboard langsung di panel, tersimpan di `tasks.json`
 - Water tracker 8 gelas per hari, reset otomatis saat tanggal berganti, pengingat 45 menit
 - File shelf: drag file ke notch, klik untuk membuka; path disimpan, file tidak disalin

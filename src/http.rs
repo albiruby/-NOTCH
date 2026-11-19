@@ -1,13 +1,47 @@
-//! Minimal HTTPS GET over WinHTTP, shared by lyrics and the AI cockpit.
+//! Minimal HTTPS over WinHTTP, shared by lyrics, weather, the AI cockpit
+//! and Ask. Supports GET/POST and reading the body as it arrives.
 
 use windows::core::{w, PCWSTR};
 use windows::Win32::Networking::WinHttp::*;
 
+/// Body size cap for buffered requests.
+const MAX_BODY: usize = 2 * 1024 * 1024;
+
 /// GET `https://{host}{path}` with extra request headers. Returns the HTTP
 /// status code and body (capped at 2 MB), or None on a transport failure.
 pub fn get(host: &str, path: &str, headers: &[(&str, &str)]) -> Option<(u32, String)> {
+    buffered("GET", host, path, headers, None)
+}
+
+fn buffered(
+    method: &str,
+    host: &str,
+    path: &str,
+    headers: &[(&str, &str)],
+    body: Option<&[u8]>,
+) -> Option<(u32, String)> {
+    let mut out = Vec::new();
+    let status = stream(method, host, path, headers, body, |chunk| {
+        out.extend_from_slice(chunk);
+        out.len() <= MAX_BODY
+    })?;
+    Some((status, String::from_utf8_lossy(&out).to_string()))
+}
+
+/// Send a request and hand the body to `on_chunk` as it arrives. Return
+/// false from `on_chunk` to stop reading. Returns the status code, or None
+/// on a transport failure.
+pub fn stream(
+    method: &str,
+    host: &str,
+    path: &str,
+    headers: &[(&str, &str)],
+    body: Option<&[u8]>,
+    mut on_chunk: impl FnMut(&[u8]) -> bool,
+) -> Option<u32> {
     let host_w: Vec<u16> = host.encode_utf16().chain(std::iter::once(0)).collect();
     let path_w: Vec<u16> = path.encode_utf16().chain(std::iter::once(0)).collect();
+    let method_w: Vec<u16> = method.encode_utf16().chain(std::iter::once(0)).collect();
     let header_block: String = headers
         .iter()
         .map(|(name, value)| format!("{name}: {value}\r\n"))
@@ -31,7 +65,7 @@ pub fn get(host: &str, path: &str, headers: &[(&str, &str)]) -> Option<(u32, Str
         }
         let request = WinHttpOpenRequest(
             connect,
-            w!("GET"),
+            PCWSTR::from_raw(method_w.as_ptr()),
             PCWSTR::from_raw(path_w.as_ptr()),
             PCWSTR::null(),
             PCWSTR::null(),
@@ -45,13 +79,16 @@ pub fn get(host: &str, path: &str, headers: &[(&str, &str)]) -> Option<(u32, Str
         }
 
         let mut status = 0u32;
-        let mut body = Vec::new();
         let headers_arg = if header_w.is_empty() {
             None
         } else {
             Some(header_w.as_slice())
         };
-        let ok = WinHttpSendRequest(request, headers_arg, None, 0, 0, 0).is_ok()
+        let (body_ptr, body_len) = match body {
+            Some(b) => (Some(b.as_ptr() as *const core::ffi::c_void), b.len() as u32),
+            None => (None, 0),
+        };
+        let ok = WinHttpSendRequest(request, headers_arg, body_ptr, body_len, body_len, 0).is_ok()
             && WinHttpReceiveResponse(request, std::ptr::null_mut()).is_ok();
         if ok {
             let mut size = std::mem::size_of::<u32>() as u32;
@@ -82,8 +119,7 @@ pub fn get(host: &str, path: &str, headers: &[(&str, &str)]) -> Option<(u32, Str
                     break;
                 }
                 chunk.truncate(read as usize);
-                body.extend_from_slice(&chunk);
-                if body.len() > 2 * 1024 * 1024 {
+                if !on_chunk(&chunk) {
                     break;
                 }
             }
@@ -92,6 +128,6 @@ pub fn get(host: &str, path: &str, headers: &[(&str, &str)]) -> Option<(u32, Str
         let _ = WinHttpCloseHandle(request);
         let _ = WinHttpCloseHandle(connect);
         let _ = WinHttpCloseHandle(session);
-        ok.then(|| (status, String::from_utf8_lossy(&body).to_string()))
+        ok.then_some(status)
     }
 }

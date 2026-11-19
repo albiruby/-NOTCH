@@ -162,8 +162,11 @@ impl Shape {
             return true;
         }
 
-        let cx = px.clamp(self.x + r, self.right() - r);
-        let cy = py.clamp(self.y + r, self.bottom() - r);
+        // max/min instead of clamp: when the radius is half the size (or a
+        // trimmed hit shape), float error can put the low bound above the
+        // high one, and f32::clamp panics on that.
+        let cx = px.max(self.x + r).min(self.right() - r);
+        let cy = py.max(self.y + r).min(self.bottom() - r);
         let dx = px - cx;
         let dy = py - cy;
         dx * dx + dy * dy <= r * r
@@ -325,6 +328,8 @@ pub enum OverlayKind {
     Privacy,
     /// Battery is low and not charging, or back on power.
     Battery,
+    /// Free text (to-do, charger, network, keyboard, focus).
+    Message,
 }
 
 /// Transient compact-pill content shown after a hardware key event.
@@ -463,6 +468,18 @@ pub fn focus_reset(shape: &Shape) -> Rect {
     }
 }
 
+/// One of the three lyric rows on the panel overview (offset -1, 0, +1
+/// around the current line), matching the renderer's layout.
+pub fn lyric_row(shape: &Shape, offset: i32) -> Rect {
+    let top = shape.y.max(0.0);
+    Rect {
+        x: shape.x + shape.w * 0.40,
+        y: top + 28.0 + (offset + 1) as f32 * 16.0,
+        w: shape.w * 0.60 - 24.0,
+        h: 16.0,
+    }
+}
+
 pub fn progress_bar(shape: &Shape) -> Rect {
     let top = shape.y.max(0.0);
     Rect {
@@ -575,11 +592,16 @@ impl Spring {
         }
     }
 
+    pub fn target(&self) -> f32 {
+        self.target
+    }
+
     pub fn set_target(&mut self, target: f32) {
         self.target = target;
     }
 
     /// Returns true while the spring is still moving.
+    #[allow(dead_code)]
     pub fn step(&mut self, dt: f32) -> bool {
         self.step_with(dt, crate::theme::motion::SPRING_OMEGA, 1.0)
     }
@@ -712,26 +734,53 @@ pub mod hub {
         )
     }
 
-    /// Live Activities card under the media card; only while any exist.
+    // Centre, under media: today (week, water, tasks).
+    const TODAY_H: f32 = 128.0;
+    pub fn today() -> Rect {
+        let m = media();
+        r(m.x, m.y + m.h + GAP, m.w, TODAY_H)
+    }
+    /// Water dots in the today card (8 glasses).
+    pub fn water_dot(index: usize) -> Rect {
+        let t = today();
+        r(t.x + 20.0 + index as f32 * 26.0, t.y + 92.0, 22.0, 22.0)
+    }
+    /// Task rows in the today card (click toggles done).
+    pub const TODAY_TASKS: usize = 3;
+    pub fn today_task(index: usize) -> Rect {
+        let t = today();
+        r(t.x + 250.0, t.y + 40.0 + index as f32 * 26.0, t.w - 266.0, 24.0)
+    }
+
+    /// Live Activities card under the today card; only while any exist.
     pub fn activities(count: usize) -> Option<Rect> {
         if count == 0 {
             return None;
         }
-        let m = media();
-        Some(r(m.x, m.y + m.h + GAP, m.w, 48.0 + count as f32 * 52.0))
+        let t = today();
+        Some(r(t.x, t.y + t.h + GAP, t.w, 48.0 + count as f32 * 52.0))
     }
     pub fn activity_row(index: usize) -> Rect {
-        let m = media();
+        let t = today();
         r(
-            m.x + 20.0,
-            m.y + m.h + GAP + 44.0 + index as f32 * 52.0,
-            m.w - 40.0,
+            t.x + 20.0,
+            t.y + t.h + GAP + 44.0 + index as f32 * 52.0,
+            t.w - 40.0,
             44.0,
         )
     }
 
-    pub fn cards() -> [Rect; 7] {
-        [launcher(), clip(), media(), focus(), ai(), quick(), shelf()]
+    pub fn cards() -> [Rect; 8] {
+        [
+            launcher(),
+            clip(),
+            media(),
+            focus(),
+            ai(),
+            quick(),
+            shelf(),
+            today(),
+        ]
     }
 
     /// Offsets that map the Cards-layout quick/shelf geometry into the hub.
@@ -797,5 +846,19 @@ pub mod hub {
     pub fn focus_reset() -> Rect {
         let f = focus();
         r(f.x + f.w - 88.0, f.y + 92.0, 72.0, 34.0)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Shape;
+
+    #[test]
+    fn contains_survives_radius_of_half_height() {
+        // The trimmed notch hit shape: height exactly 2r, with float error
+        // that once made the inner clamp bounds cross and panic.
+        let s = Shape { x: 0.0, y: 0.0, w: 200.0, h: 39.904926, r: 19.952467 };
+        assert!(s.contains(100.0, 15.0));
+        assert!(!s.contains(0.5, 0.5));
     }
 }

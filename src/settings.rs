@@ -22,6 +22,10 @@ pub struct Settings {
     pub island_anchor: Option<[f32; 2]>,
     /// Accent colour theme: `violet` (default), `mint`, or `coral`.
     pub theme: crate::theme::accent::Theme,
+    /// Show the idle mascot (a pair of eyes) when nothing is happening.
+    pub mascot: bool,
+    /// Minimal notch: the closed pill becomes a thin line.
+    pub minimal: bool,
 }
 
 impl Default for Settings {
@@ -38,6 +42,8 @@ impl Default for Settings {
             show_clock: true,
             island_anchor: None,
             theme: Default::default(),
+            mascot: true,
+            minimal: false,
         }
     }
 }

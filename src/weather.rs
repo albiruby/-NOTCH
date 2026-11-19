@@ -19,6 +19,9 @@ pub struct Weather {
     pub desc: String,
     pub place: String,
     pub ok: bool,
+    /// Coordinates of the detected area.
+    pub lat: Option<f64>,
+    pub lon: Option<f64>,
 }
 
 impl Weather {
@@ -74,6 +77,15 @@ pub fn parse(body: &str) -> Option<Weather> {
         .unwrap_or("")
         .trim()
         .to_string();
+    let area = value
+        .get("nearest_area")
+        .and_then(|v| v.as_array())
+        .and_then(|a| a.first());
+    let coord = |key: &str| {
+        area.and_then(|a| a.get(key))
+            .and_then(|v| v.as_str())
+            .and_then(|s| s.parse::<f64>().ok())
+    };
     let place = value
         .get("nearest_area")
         .and_then(|v| v.as_array())
@@ -92,6 +104,8 @@ pub fn parse(body: &str) -> Option<Weather> {
         desc,
         place,
         ok: true,
+        lat: coord("latitude"),
+        lon: coord("longitude"),
     })
 }
 

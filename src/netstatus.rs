@@ -97,6 +97,46 @@ fn read() -> NetStatus {
     status
 }
 
+/// Flip the Wi-Fi (or Bluetooth) radio on a worker thread. Returns false when
+/// there is no such radio, so the caller can open Settings instead.
+pub fn toggle(wifi: bool) -> bool {
+    let current = snapshot();
+    let state = if wifi { current.wifi } else { current.bluetooth };
+    let Some(on) = state else {
+        return false;
+    };
+    let target = if on { RadioState::Off } else { RadioState::On };
+    // Show the new state at once; the worker confirms it afterwards.
+    if let Ok(mut slot) = slot().lock() {
+        if wifi {
+            slot.wifi = Some(!on);
+        } else {
+            slot.bluetooth = Some(!on);
+        }
+    }
+    wake();
+    thread::spawn(move || {
+        unsafe {
+            let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
+        }
+        let want = if wifi { RadioKind::WiFi } else { RadioKind::Bluetooth };
+        let _ = Radio::RequestAccessAsync().and_then(|op| block(&op));
+        if let Ok(radios) = Radio::GetRadiosAsync().and_then(|op| block(&op)) {
+            for radio in radios {
+                if radio.Kind().ok() == Some(want) {
+                    let _ = radio.SetStateAsync(target).and_then(|op| block(&op));
+                }
+            }
+        }
+        let next = read();
+        if let Ok(mut slot) = slot().lock() {
+            *slot = next;
+        }
+        wake();
+    });
+    true
+}
+
 fn wake() {
     let raw = WAKE.load(Ordering::Relaxed);
     if raw != 0 {

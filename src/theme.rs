@@ -83,6 +83,8 @@ pub mod glass {
         pub sheen: f32,
         pub rim: f32,
         pub shadow: f32,
+        /// Dark backing under the tint (stands in for backdrop blur).
+        pub base: f32,
     }
 
     /// Near-clear glass: a light tinted veil, with the sheen and rim doing
@@ -94,6 +96,7 @@ pub mod glass {
         sheen: 0.16,
         rim: 0.42,
         shadow: 0.16,
+        base: 1.0,
     };
 }
 
@@ -117,7 +120,12 @@ pub mod radius {
 }
 
 pub mod typography {
-    pub const FONT_UI: &str = "Segoe UI Variable";
+    /// Body text, labels, buttons (bundled, see `fonts.rs`).
+    pub const FONT_UI: &str = crate::fonts::BODY;
+    /// Titles, clocks and numbers.
+    pub const FONT_DISPLAY: &str = crate::fonts::DISPLAY;
+    /// Large display figures and soft accents.
+    pub const FONT_SERIF: &str = crate::fonts::SERIF;
     pub const FONT_MONO: &str = "Cascadia Code";
     pub const DISPLAY: f32 = 32.0;
     pub const BODY_SM: f32 = 13.0;
@@ -137,6 +145,9 @@ pub mod motion {
     /// Island snap: a little stiffer travel with a small overshoot.
     pub const SNAP_OMEGA: f32 = 24.0;
     pub const SNAP_ZETA: f32 = 0.66;
+    /// Expand/collapse morph: softer than SPRING_OMEGA with a gentle settle.
+    pub const MORPH_OMEGA: f32 = 19.0;
+    pub const MORPH_ZETA: f32 = 0.82;
 }
 
 pub mod metric {
