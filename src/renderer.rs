@@ -2535,7 +2535,7 @@ impl Renderer {
         let dot = solid(ctx, &theme::rgb(theme::color::SUCCESS, 1.0))?;
         ctx.FillEllipse(&circle((x + 4.0) * s, (y + 8.0) * s, 3.0 * s), &dot);
         let text = solid(ctx, &theme::rgb(theme::accent::text2(), 1.0))?;
-        let label = format!("Active now  Â·  {}", ai.active_sessions.join("  Â·  "));
+        let label = format!("Active now  ·  {}", ai.active_sessions.join("  ·  "));
         draw_text(
             ctx,
             &label,
@@ -2668,9 +2668,9 @@ impl Renderer {
                     &muted,
                 );
                 for (i, line) in [
-                    "notch key set claude sk-ant-adminâ€¦",
-                    "notch key set openai sk-admin-â€¦",
-                    "notch key set deepseek sk-â€¦",
+                    "notch key set claude sk-ant-admin…",
+                    "notch key set openai sk-admin-…",
+                    "notch key set deepseek sk-…",
                     "notch ai budget 200",
                 ]
                 .iter()
@@ -2717,13 +2717,13 @@ impl Renderer {
                     &muted,
                 );
                 let value = if !stat.configured {
-                    "â€”".to_string()
+                    "—".to_string()
                 } else if let Some(cost) = stat.cost {
                     format!("${cost:.2}")
                 } else if let Some(balance) = &stat.balance {
                     balance.clone()
                 } else {
-                    "â€¦".to_string()
+                    "…".to_string()
                 };
                 draw_text(
                     ctx,
@@ -2780,7 +2780,7 @@ impl Renderer {
                     1.0,
                 )?;
                 let label = format!(
-                    "{:.0}% of ${:.0} budget  Â·  ${total:.2}",
+                    "{:.0}% of ${:.0} budget  ·  ${total:.2}",
                     ratio * 100.0,
                     ai.budget
                 );
@@ -3214,7 +3214,7 @@ impl Renderer {
             };
             draw_text(
                 ctx,
-                &format!("{phase} Â· {}", if p.focus_running { "running" } else { "paused" }),
+                &format!("{phase} · {}", if p.focus_running { "running" } else { "paused" }),
                 &self.fmt_small,
                 scaled_rect(f.x + 80.0, f.y + 12.0, 160.0, 22.0, s),
                 if p.focus_running { &accent } else { &muted },

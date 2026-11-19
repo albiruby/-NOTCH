@@ -6,6 +6,16 @@ tanpa runtime tambahan.
 Dibangun dengan Rust + Win32 + DirectComposition/Direct2D. Visual tree dipegang
 kompositor Windows, jadi aplikasi hanya menggambar ketika ada yang berubah.
 
+## Tampilan
+
+![Hub: semua widget dalam satu layar](docs/screenshots/hub.png)
+
+Hover pill untuk melihat lagu yang diputar; klik untuk membuka Hub.
+
+![Wide bar saat hover](docs/screenshots/peek.png)
+
+![Pill dengan judul lagu](docs/screenshots/pill.png)
+
 ## Status
 
 v1.13 — AI Developer Cockpit di Hub. v1.12: indikator privasi kamera/mikrofon dan Live Activities lewat CLI. Kaca hampir bening; theme (Violet, Aurora Mint, Sunset Coral) mengubah seluruh tampilan: rona kaca, teks, track, tile, dan tepi. Mode iPhone X notch dan Dynamic Island (Pro). Hub memenuhi layar dengan tata letak lega ala referensi. Dynamic island bisa di-drag bebas dan menempel ke tepi/tengah layar. Layout Hub jadi default (klik pill, semua widget muncul). Glassmorphism penuh: permukaan tembus pandang, kilau diagonal, tepi bercahaya, bayangan lembut. Visual mengikuti referensi brand. Yang sudah ada:
